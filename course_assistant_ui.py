@@ -437,7 +437,7 @@ with gr.Blocks() as demo:
 
         # 聊天区
         with gr.Column(scale=8, elem_classes="chat-area"):
-            gr.Markdown("## 欢迎使用近屿智能课程咨询助手", elem_classes="chat-title")
+            gr.Markdown("## 欢迎使用课程咨询助手", elem_classes="chat-title")
             chatbot = gr.Chatbot(
                 layout="bubble", feedback_options=None,
                 value=get_current()["messages"],
