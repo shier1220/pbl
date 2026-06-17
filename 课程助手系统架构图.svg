@@ -1,0 +1,141 @@
+<svg viewBox="0 0 680 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="sans-serif">
+  <title>课程助手系统架构图 v0.4</title>
+  <desc>4层架构：前端Gradio → 后端FastAPI → AI模块DeepSeek/RAG → 数据层ChromaDB/SQLite</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke"
+        stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <style>
+    .layer-box { fill: none; stroke: #D3D1C7; stroke-width: 0.5; stroke-dasharray: 6 3; }
+    .layer-tag { font-size: 11px; fill: #B4B2A9; font-weight: 400; }
+    .arr { stroke: #B4B2A9; stroke-width: 1.5; marker-end: url(#arrow); fill: none; }
+    .arr-http { stroke: #E67E22; stroke-width: 1.5; marker-end: url(#arrow); fill: none; stroke-dasharray: 4 2; }
+    .legend-text { font-size: 12px; fill: #888780; font-weight: 400; }
+    .legend-title { font-size: 12px; fill: #5F5E5A; font-weight: 500; }
+    .th { font-size: 14px; font-weight: 500; }
+    .ts { font-size: 12px; fill: #888780; font-weight: 400; }
+    .node { cursor: default; }
+    .cloud-badge { font-size: 9px; fill: #E67E22; font-weight: 500; }
+  </style>
+
+  <text class="th" x="340" y="26" text-anchor="middle">课程助手 · 系统架构图 v0.4（前后端对接版）</text>
+
+  <!-- ===== Layer 1: 前端展示层 ===== -->
+  <rect class="layer-box" x="28" y="40" width="624" height="130" rx="10"/>
+  <text class="layer-tag" x="40" y="54">第1层 · 前端展示</text>
+
+  <rect x="36" y="100" width="608" height="28" rx="14" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="340" y="118" text-anchor="middle" dominant-baseline="central" fill="#185FA5">前端展示层 · Gradio Web + httpx SSE</text>
+
+  <rect x="50" y="70" width="172" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="136" y="87" text-anchor="middle" dominant-baseline="central">Gradio 6.18</text>
+  <text class="ts" x="136" y="104" text-anchor="middle" dominant-baseline="central">Web 对话界面 + CSS 主题</text>
+
+  <rect x="254" y="70" width="172" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="340" y="87" text-anchor="middle" dominant-baseline="central">多会话管理</text>
+  <text class="ts" x="340" y="104" text-anchor="middle" dominant-baseline="central">UUID session_id + 日期分组</text>
+
+  <rect x="458" y="70" width="172" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="544" y="87" text-anchor="middle" dominant-baseline="central">文件上传</text>
+  <text class="ts" x="544" y="104" text-anchor="middle" dominant-baseline="central">PDF / Word → 后端解析入库</text>
+
+  <!-- HTTP/SSE label -->
+  <line x1="340" y1="155" x2="340" y2="185" class="arr-http"/>
+  <text class="cloud-badge" x="352" y="172" dominant-baseline="central">HTTP / SSE</text>
+
+  <!-- ===== Layer 2: 后端服务层 ===== -->
+  <rect class="layer-box" x="28" y="195" width="624" height="130" rx="10"/>
+  <text class="layer-tag" x="40" y="209">第2层 · 后端服务</text>
+
+  <rect x="36" y="255" width="608" height="28" rx="14" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="340" y="273" text-anchor="middle" dominant-baseline="central" fill="#534AB7">后端服务层 · FastAPI + LangChain（端口 8001）</text>
+
+  <rect x="50" y="225" width="172" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="136" y="242" text-anchor="middle" dominant-baseline="central">FastAPI 异步框架</text>
+  <text class="ts" x="136" y="259" text-anchor="middle" dominant-baseline="central">/chat/stream /upload /sessions</text>
+
+  <rect x="254" y="225" width="172" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="340" y="242" text-anchor="middle" dominant-baseline="central">LangChain 编排</text>
+  <text class="ts" x="340" y="259" text-anchor="middle" dominant-baseline="central">RAG 链路 + Prompt 管理</text>
+
+  <rect x="458" y="225" width="172" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="544" y="242" text-anchor="middle" dominant-baseline="central">意图路由</text>
+  <text class="ts" x="544" y="259" text-anchor="middle" dominant-baseline="central">向量相似度 + 会话缓存</text>
+
+  <line x1="340" y1="325" x2="340" y2="355" class="arr"/>
+
+  <!-- ===== Layer 3: AI 核心层 ===== -->
+  <rect class="layer-box" x="28" y="357" width="624" height="130" rx="10"/>
+  <text class="layer-tag" x="40" y="371">第3层 · AI 核心</text>
+
+  <rect x="36" y="417" width="608" height="28" rx="14" fill="#FDF2E9" stroke="#F0B27A" stroke-width="0.5"/>
+  <text class="th" x="340" y="435" text-anchor="middle" dominant-baseline="central" fill="#E67E22">AI 核心层 · DeepSeek 云端生成 + 本地检索</text>
+
+  <!-- DeepSeek API (cloud) -->
+  <rect x="50" y="387" width="130" height="48" rx="8" fill="#FDF2E9" stroke="#F0B27A" stroke-width="0.5"/>
+  <text class="th" x="115" y="404" text-anchor="middle" dominant-baseline="central">DeepSeek API ☁️</text>
+  <text class="ts" x="115" y="421" text-anchor="middle" dominant-baseline="central">deepseek-chat (671B)</text>
+
+  <!-- Embedding (local) -->
+  <rect x="200" y="387" width="130" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="265" y="404" text-anchor="middle" dominant-baseline="central">嵌入模型 🏠</text>
+  <text class="ts" x="265" y="421" text-anchor="middle" dominant-baseline="central">instructor-xl (本地)</text>
+
+  <!-- RAG Engine -->
+  <rect x="350" y="387" width="130" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="415" y="404" text-anchor="middle" dominant-baseline="central">RAG 引擎</text>
+  <text class="ts" x="415" y="421" text-anchor="middle" dominant-baseline="central">检索增强生成</text>
+
+  <!-- Intent -->
+  <rect x="500" y="387" width="130" height="48" rx="8" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="th" x="565" y="404" text-anchor="middle" dominant-baseline="central">意图识别 🏠</text>
+  <text class="ts" x="565" y="421" text-anchor="middle" dominant-baseline="central">向量路由 + 缓存</text>
+
+  <line x1="340" y1="487" x2="340" y2="517" class="arr"/>
+
+  <!-- ===== Layer 4: 数据持久层 ===== -->
+  <rect class="layer-box" x="28" y="519" width="624" height="130" rx="10"/>
+  <text class="layer-tag" x="40" y="533">第4层 · 数据持久</text>
+
+  <rect x="36" y="579" width="608" height="28" rx="14" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="340" y="597" text-anchor="middle" dominant-baseline="central" fill="#534AB7">数据持久层 · 向量存储 + 业务数据</text>
+
+  <rect x="86" y="549" width="160" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="166" y="566" text-anchor="middle" dominant-baseline="central">ChromaDB 🏠</text>
+  <text class="ts" x="166" y="583" text-anchor="middle" dominant-baseline="central">向量存储 &amp; 语义检索</text>
+
+  <rect x="266" y="549" width="148" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="340" y="566" text-anchor="middle" dominant-baseline="central">SQLite</text>
+  <text class="ts" x="340" y="583" text-anchor="middle" dominant-baseline="central">会话历史 + 用户名</text>
+
+  <rect x="434" y="549" width="196" height="48" rx="8" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="th" x="532" y="566" text-anchor="middle" dominant-baseline="central">instructor-xl 模型文件</text>
+  <text class="ts" x="532" y="583" text-anchor="middle" dominant-baseline="central">~4.6GB 本地权重</text>
+
+  <!-- ===== Legend ===== -->
+  <rect x="28" y="665" width="624" height="40" rx="8" fill="#F1EFE8" stroke="#D3D1C7" stroke-width="0.5"/>
+
+  <text class="legend-title" x="48" y="689" dominant-baseline="central">图例</text>
+
+  <rect x="100" y="673" width="60" height="22" rx="6" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="ts" x="130" y="688" text-anchor="middle" dominant-baseline="central">本地组件</text>
+
+  <rect x="176" y="673" width="60" height="22" rx="6" fill="#FDF2E9" stroke="#F0B27A" stroke-width="0.5"/>
+  <text class="ts" x="206" y="688" text-anchor="middle" dominant-baseline="central">云端服务</text>
+
+  <rect x="260" y="673" width="60" height="22" rx="6" fill="#EEEDFE" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="ts" x="290" y="688" text-anchor="middle" dominant-baseline="central">服务层</text>
+
+  <line x1="340" y1="684" x2="370" y2="684" stroke="#B4B2A9" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="legend-text" x="384" y="688" dominant-baseline="central">内部调用</text>
+
+  <line x1="450" y1="684" x2="480" y2="684" stroke="#E67E22" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arrow)"/>
+  <text class="legend-text" x="494" y="688" dominant-baseline="central">HTTP / SSE</text>
+
+  <text class="ts" x="595" y="688" text-anchor="middle" dominant-baseline="central">🏠 本地 &nbsp; ☁️ 云端</text>
+</svg>

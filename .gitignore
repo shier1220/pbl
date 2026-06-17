@@ -1,0 +1,27 @@
+# 虚拟环境
+pbl_venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# 模型文件（太大）
+instructor-xl/
+models/
+
+# 向量数据库数据
+chroma_db/
+
+# 会话数据（运行时生成）
+sessions.db
+sessions.json
+
+# 环境变量
+.env
+
+# 系统文件
+.DS_Store
+
+# IDE
+.claude/
+.learnings/
