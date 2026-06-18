@@ -16,18 +16,13 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from chromadb import PersistentClient
 
-from embedding import InstructorEmbedding, MODEL_PATH
+from src.embedding import InstructorEmbedding
+from src.config import MODEL_PATH, CHROMA_PATH, COLLECTION_NAME, COLLECTION_METADATA, CHUNK_SIZE, CHUNK_OVERLAP, CHUNK_SEPARATORS
 
 
-# ── 配置（与 course_assistant_api.py 保持一致）────
+# ── 本地配置 ──
 BASE_DIR = Path(__file__).resolve().parent
-CHROMA_PATH = str(BASE_DIR / "chroma_db")
-COLLECTION_NAME = "course_knowledge"
 DEFAULT_SOURCE = str(BASE_DIR / "aigc_knowledge_base.txt")
-
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
 
 
 def clear_collection():
@@ -55,7 +50,7 @@ def build_knowledge_base(source_file: str, clear: bool = True):
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=SEPARATORS,
+        separators=CHUNK_SEPARATORS,
     )
     chunks = splitter.split_text(text)
     print("分块完成: %d 个片段 (chunk_size=%d, overlap=%d)" % (
@@ -80,10 +75,7 @@ def build_knowledge_base(source_file: str, clear: bool = True):
 
     col = chroma_client.create_collection(
         name=COLLECTION_NAME,
-        metadata={
-            "description": "AIGC课程助手知识库",
-            "hnsw:space": "cosine",
-        },
+        metadata=COLLECTION_METADATA,
     )
 
     vectorstore = Chroma(
