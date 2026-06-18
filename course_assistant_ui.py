@@ -100,6 +100,9 @@ footer, .footer { display: none !important; }
 }
 .top-bar, .top-bar p, .top-bar span, .top-bar div, .top-bar .prose, .top-bar .prose p { color: white !important; }
 
+/* 顶栏标题 - 最右侧 */
+.top-bar-title { margin-left: auto !important; flex-shrink: 0 !important; }
+
 /* ===== 侧边栏容器 ===== */
 .sidebar,
 div[id*="sidebar"],
@@ -219,11 +222,18 @@ div[id*="sidebar"],
 
 /* ===== 退出按钮 ===== */
 .exit-btn, .exit-btn button, .exit-btn [role="button"] {
-    background: #ef4444 !important; color: white !important; border: none !important;
-    border-radius: 14px !important; width: auto !important; min-width: 0 !important;
-    height: 34px !important; min-height: 34px !important; font-size: 12px !important;
-    padding: 0 12px !important; display: flex !important;
+    background: transparent !important; color: white !important;
+    border: 1px solid rgba(255,255,255,0.4) !important;
+    border-radius: 6px !important;
+    width: 60px !important; min-width: 60px !important;
+    height: 32px !important; min-height: 32px !important; font-size: 13px !important;
+    padding: 0 !important; display: flex !important;
     align-items: center !important; justify-content: center !important;
+    cursor: pointer !important; white-space: nowrap !important;
+}
+.exit-btn button:hover, .exit-btn [role="button"]:hover {
+    background: rgba(255,255,255,0.1) !important;
+    border-color: rgba(255,255,255,0.6) !important;
 }
 
 /* ===== 聊天区 ===== */
@@ -285,13 +295,23 @@ def on_upload(file, chatbot):
             resp.raise_for_status()
             data = resp.json()
 
-        summary = f"📎 已上传：{original_name} → 知识库（{data['chunks']} 个片段）\n现在你可以基于课程资料向我提问了。"
+        summary = f"📎 已上传：{original_name} → 知识库（{data['chunks']} 个片段）\n现在你可以基于AIGC资料向我提问了。"
         chatbot.append({"role": "assistant", "content": summary})
         sess["messages"] = chatbot
         sess["file_context"] = original_name  # 记录文件名
         save_sessions()
         return original_name, chatbot
 
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        err = f"⚠️ 上传失败：{detail}"
+        chatbot.append({"role": "assistant", "content": err})
+        sess["messages"] = chatbot
+        save_sessions()
+        return sess["file_context"], chatbot
     except httpx.ConnectError:
         err = "⚠️ 后端服务未启动，请先运行 course_assistant_api.py"
         chatbot.append({"role": "assistant", "content": err})
@@ -413,7 +433,8 @@ with gr.Blocks() as demo:
     # 顶栏
     with gr.Row(elem_classes="top-bar"):
         gr.Markdown("欢迎，18121339701！", scale=8)
-        gr.Button("🔴 退出", elem_classes="exit-btn", scale=2)
+        exit_btn = gr.Button("退出", elem_classes="exit-btn", scale=0, min_width=60)
+        gr.HTML('<div style="white-space:nowrap;font-weight:500;text-align:right;">🤖 AIGC咨询助手</div>', scale=1, elem_classes="top-bar-title")
 
     # 主体
     with gr.Row(equal_height=True, elem_classes="main-row"):
@@ -437,7 +458,7 @@ with gr.Blocks() as demo:
 
         # 聊天区
         with gr.Column(scale=8, elem_classes="chat-area"):
-            gr.Markdown("## 欢迎使用课程咨询助手", elem_classes="chat-title")
+            gr.Markdown("## 欢迎使用AIGC咨询助手", elem_classes="chat-title")
             chatbot = gr.Chatbot(
                 layout="bubble", feedback_options=None,
                 value=get_current()["messages"],
