@@ -37,5 +37,5 @@ class QueryCondenser:
         try:
             resp = await asyncio.to_thread(self.llm.invoke, CONDENSE_PROMPT.format(history=hist_text, query=query))
             condensed = resp.content.strip()
-            return condensed if condensed and len(condensed)>1 else query
+            return condensed if condensed and len(condensed) >= 3 else query
         except Exception: return query
