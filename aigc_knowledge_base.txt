@@ -479,21 +479,4 @@ Attention(Q, K, V) = softmax(QK^T / √d_k) × V
 - 向量数据库（ChromaDB/Milvus/FAISS 对比选型）
 - Embedding 模型选择与对比
 
-### 7.2 常见面试题
-1. RAG 的分块策略如何选择？重叠有什么作用？
-2. LoRA 为什么能用极少的参数达到接近全量微调的效果？
-3. vLLM 的 PagedAttention 如何解决显存碎片化？
-4. ReAct 和普通的 LLM 调用有什么区别？
-5. 如何处理 RAG 中的"检索到无关内容"问题？
-6. QLoRA 的 4-bit 量化如何实现？双重量化是什么？
-7. 什么时候用微调而不是 RAG？
-8. 向量数据库选型考量因素有哪些？
 
-### 7.3 岗位要求对标（AIGC 大模型应用工程师）
-- Python 精通，PyTorch/Transformers 熟练
-- 熟悉主流 LLM API（OpenAI/DeepSeek/Claude）
-- 掌握 RAG 全链路：文档解析 → 分块 → 向量化 → 检索 → 生成
-- 了解参数高效微调（LoRA/QLoRA/P-Tuning）
-- 有模型部署经验（vLLM/Ollama/TGI）
-- 熟悉至少一个 Agent 框架（LangChain/LlamaIndex/AutoGen）
-- 了解 Prompt Engineering 最佳实践
