@@ -5,7 +5,9 @@ from src.config import SEARCH_CACHE_TTL, SEARCH_RATE_LIMIT
 logger = logging.getLogger("course_assistant.search.cache")
 
 class SearchCache:
-    def __init__(self, ttl=SEARCH_CACHE_TTL): self._cache = {}; self.ttl = ttl
+    def __init__(self, ttl=SEARCH_CACHE_TTL, max_size=200):
+        from collections import OrderedDict
+        self._cache = OrderedDict(); self.ttl = ttl; self.max_size = max_size
     @staticmethod
     def _key(q): return hashlib.md5(q.lower().strip().encode()).hexdigest()
 
@@ -13,12 +15,19 @@ class SearchCache:
         k = self._key(query)
         if k in self._cache:
             ts, results = self._cache[k]
-            if time.time() - ts < self.ttl: return results
+            if time.time() - ts < self.ttl:
+                self._cache.move_to_end(k)
+                return results
             del self._cache[k]
         return None
 
     def put(self, query, results):
-        self._cache[self._key(query)] = (time.time(), results)
+        k = self._key(query)
+        if k in self._cache: self._cache.move_to_end(k)
+        else:
+            self._cache[k] = (time.time(), results)
+            while len(self._cache) > self.max_size:
+                self._cache.popitem(last=False)
 
     def invalidate(self, query=None):
         if query: self._cache.pop(self._key(query), None)

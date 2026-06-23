@@ -7,7 +7,7 @@ import numpy as np
 import jieba
 from rank_bm25 import BM25Okapi
 
-from src.config import RAG_TOP_K, RAG_OVERFETCH, RRF_K
+from src.config import RAG_TOP_K, RAG_OVERFETCH, RRF_K, MAX_BM25_DOCS
 
 logger = logging.getLogger("course_assistant.retriever")
 
@@ -29,7 +29,7 @@ class BM25Index:
 
     def build(self, documents, metadatas=None, ids=None):
         self.corpus = list(documents)
-        self.metadatas = metadatas or [{}] * len(documents)
+        self.metadatas = metadatas or [{} for _ in range(len(documents))]
         self.chroma_ids = ids or [str(i) for i in range(len(documents))]
         tokenized = [self.tokenize(d) for d in self.corpus]
         if tokenized and any(tokenized): self._index = BM25Okapi(tokenized)
@@ -62,16 +62,44 @@ class HybridRetriever:
         try:
             data = self.vectorstore._collection.get(include=["documents","metadatas"])
             docs = data.get("documents", [])
-            if docs: self.bm25.build(docs, data.get("metadatas", []), data.get("ids", []))
+            if not docs: return
+            if len(docs) > MAX_BM25_DOCS:
+                logger.warning("BM25 文档数 %d 超出上限 %d，将截断前 %d 条索引", len(docs), MAX_BM25_DOCS, MAX_BM25_DOCS)
+                docs = docs[:MAX_BM25_DOCS]
+                metas = (data.get("metadatas", []) or [])[:MAX_BM25_DOCS]
+                ids = (data.get("ids", []) or [])[:MAX_BM25_DOCS]
+            else:
+                metas = data.get("metadatas", []) or []
+                ids = data.get("ids", []) or []
+            self.bm25.build(docs, metas, ids)
         except Exception as e: logger.warning("BM25 构建失败: %s", e)
 
     def rebuild_bm25_index(self):
         self.bm25 = BM25Index(); self.build_bm25_index(force=True)
 
     def _dense_search(self, query, top_k):
+        """稠密检索 — 直接查 ChromaDB collection 以获取真实 ID"""
         try:
-            results = self.vectorstore.similarity_search_with_relevance_scores(query, k=top_k)
-            return [RetrievalResult(content=doc.page_content, metadata=doc.metadata, dense_score=float(s), chroma_id=doc.metadata.get("id","")) for doc, s in results]
+            q_embedding = self.embedding_fn.embed_query(query)
+            raw = self.vectorstore._collection.query(
+                query_embeddings=[q_embedding], n_results=top_k,
+                include=["documents", "metadatas", "distances"]
+            )
+            ids = raw.get("ids", [[]])[0]
+            docs = raw.get("documents", [[]])[0]
+            metas = raw.get("metadatas", [[]])[0]
+            dists = raw.get("distances", [[]])[0]
+            results = []
+            for i in range(len(docs)):
+                # cosine 空间: distance = 1 - cos_sim → 还原 similarity
+                similarity = 1.0 - dists[i] if dists[i] is not None else 0.0
+                results.append(RetrievalResult(
+                    content=docs[i],
+                    metadata=metas[i] or {},
+                    dense_score=float(similarity),
+                    chroma_id=ids[i] if ids else ""
+                ))
+            return results
         except Exception: return []
 
     def _rrf_fuse(self, dense, sparse, top_k):

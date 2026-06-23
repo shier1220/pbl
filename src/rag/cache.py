@@ -21,7 +21,9 @@ class QueryCache:
 
     def put(self, query, value):
         k = self._key(query)
-        if k in self._cache: self._cache.move_to_end(k)
+        if k in self._cache:
+            self._cache[k] = value  # 更新值
+            self._cache.move_to_end(k)
         else:
             self._cache[k] = value
             if len(self._cache) > self.max_size: self._cache.popitem(last=False)
