@@ -20,7 +20,7 @@ class DocumentChunker:
         hp = self._heading_path(result.metadata.get("headings", []))
         for i, c in enumerate(chunks):
             c["metadata"].update({"chunk_index": i, "heading_path": hp, "document_title": result.metadata.get("title", source_name)})
-            c["metadata"].setdefault("page_number", None); c["metadata"].setdefault("section", None)
+            c["metadata"].setdefault("page_number", ""); c["metadata"].setdefault("section", "")
         return chunks
 
     def _chunk_pdf(self, r, src):

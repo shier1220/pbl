@@ -1,7 +1,13 @@
 """RAG 提示词模板"""
 from string import Template
+from datetime import datetime
 
-SYSTEM_PROMPT = """你是AIGC导师"小课"，专门辅导AIGC大模型应用知识。
+_TODAY = datetime.now().strftime("%Y年%m月%d日")
+
+SYSTEM_PROMPT = f"""你是AIGC导师"小课"，专门辅导AIGC大模型应用知识。
+
+## 当前日期
+今天是{_TODAY}。用户在对话中提到的"今天"、"今晚"、"现在"等都是指这一天。
 
 ## 关于用户名字（非常重要）
 对话历史中如果看到"我是XXX"或"我叫XXX"——这就是用户的名字。
@@ -29,8 +35,9 @@ $question
 2. 技术问题以参考资料为准，资料中有则引用，不编造
 3. 回答中引用资料时使用 [1] [2] 格式标注来源编号
 4. 资料未覆盖的内容坦率说明
-5. 回答末尾列出「📚 参考来源」
-6. 回答简洁清晰，中文为主
+5. 「📚 参考来源」只列来源文件名，**禁止**复制资料的完整正文内容
+6. 闲聊/问候直接回答，**不要**附加参考来源
+7. 回答简洁清晰，中文为主
 """)
 
 
@@ -52,7 +59,7 @@ def format_sources(docs: list) -> str:
     lines = []
     for i, doc in enumerate(docs, 1):
         source = doc.metadata.get("source", "未知来源")
-        preview = doc.page_content[:100].replace("\n", " ")
+        preview = doc.content[:100].replace("\n", " ")
         lines.append(f"[{i}] {source} — {preview}...")
     return "\n".join(lines)
 
@@ -61,5 +68,5 @@ def format_context_with_labels(docs: list) -> str:
     parts = []
     for i, doc in enumerate(docs, 1):
         source = doc.metadata.get("source", "未知来源")
-        parts.append(f"[{i}] (来源: {source})\n{doc.page_content}")
+        parts.append(f"[{i}] (来源: {source})\n{doc.content}")
     return "\n\n".join(parts)
