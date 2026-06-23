@@ -50,6 +50,21 @@ logger = logging.getLogger("course_assistant")
 # 当前日期（注入 prompt，解决 LLM 不知道时间的问题）
 TODAY_STR = datetime.now().strftime("%Y年%m月%d日 %A")
 
+# 常见问候语即时回复（0延迟，不走 LLM）
+GREETINGS = {
+    "你好": "你好呀！我是AIGC导师小课，很高兴见到你！有什么想聊的？技术问题、AI知识、还是随便聊聊，我都在～ 😊",
+    "嗨": "嗨！我是小课，你的AIGC导师。有什么需要帮忙的吗？",
+    "hello": "Hello! I'm your AIGC mentor. How can I help you today?",
+    "hi": "Hi there! 我是小课，有什么想问的？",
+    "早上好": "早上好！新的一天，有什么AI问题想探讨吗？",
+    "下午好": "下午好！休息一下，聊点AI？",
+    "晚上好": "晚上好！夜深了，还在学AI？有问题尽管问～",
+    "在吗": "在的！随时为你解答AIGC相关的问题。",
+    "谢谢": "不客气！有问题随时找我～",
+    "再见": "再见！下次有问题随时来找我～",
+    "拜拜": "拜拜！祝学习顺利～",
+}
+
 # ========== 全局组件 ==========
 session_mgr = embedding_fn = chroma_client = vectorstore = collection = _llm = None
 router = hybrid_retriever = query_cache = parser_registry = document_chunker = None
@@ -248,6 +263,18 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
         except Exception:
             pass
 
+        if msg in GREETINGS:
+            reply = GREETINGS[msg]
+            session_mgr.append_history(sid, "user", msg, user["user_id"])
+            session_mgr.append_history(sid, "assistant", reply, user["user_id"])
+            for ch in reply:
+                yield f"data: {json.dumps({'token':ch,'done':False},ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'token':'','done':True,'source':'casual_chat','docs':[]},ensure_ascii=False)}\n\n"
+            return
+
+        # 发送思考状态
+        yield f"data: {json.dumps({'token':'','done':False,'thinking':True},ensure_ascii=False)}\n\n"
+
         full = ""
         # 等待搜索结果（如果有预取）
         wr, bocha_answer = await search_task if search_task else (await search_engine.search_with_answer(msg))
@@ -345,6 +372,12 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     user_name = session_mgr.get_user_name(sid)
     extracted = session_mgr.extract_user_name(msg)
     if extracted: user_name = extracted; session_mgr.set_user_name(sid, user_name)
+
+    if msg in GREETINGS:
+        reply = GREETINGS[msg]
+        session_mgr.append_history(sid, "user", msg, user["user_id"])
+        session_mgr.append_history(sid, "assistant", reply, user["user_id"])
+        return ChatResponse(answer=reply, source="casual_chat")
 
     # 并行：意图分类 + 搜索
     intent_task = asyncio.create_task(intent_router.route(msg, history, sid))

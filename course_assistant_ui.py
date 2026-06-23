@@ -316,8 +316,15 @@ def respond(user_message, chatbot, file_context, token):
                 except json.JSONDecodeError:
                     continue
 
+                thinking = event.get("thinking", False)
                 token = event.get("token", "")
                 done = event.get("done", False)
+
+                if thinking:
+                    sess["messages"][-1]["content"] = "⏳ 正在思考..."
+                    save_user_sessions(current_username)
+                    yield "", sess["messages"], sess["file_context"]
+                    continue
 
                 if token:
                     ai_reply += token
