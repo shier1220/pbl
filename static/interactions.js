@@ -385,6 +385,36 @@
     watchShareResult();
   }
 
+  // ========== 8. 强制禁用暗色模式（Gradio 会根据系统偏好加 .dark）==========
+
+  function removeDarkClasses() {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.style.colorScheme = "light";
+    document.body.classList.remove("dark");
+    document.querySelectorAll(".dark").forEach(function (el) {
+      el.classList.remove("dark");
+    });
+  }
+
+  function watchDarkClass() {
+    removeDarkClasses();
+    const observer = new MutationObserver(function (mutations) {
+      let needRemove = false;
+      for (const m of mutations) {
+        if (m.type === "attributes" && m.attributeName === "class") {
+          if (m.target.classList && m.target.classList.contains("dark")) {
+            needRemove = true;
+          }
+        }
+      }
+      if (needRemove) removeDarkClasses();
+    });
+    observer.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ["class"] });
+    // 兜底：定时扫描
+    setInterval(removeDarkClasses, 2000);
+  }
+
   // ── init ──
 
   let initialized = false;
@@ -397,6 +427,7 @@
     document.documentElement.style.colorScheme = "light";
     document.documentElement.removeAttribute("data-theme");
     localStorage.removeItem("pbl_theme");
+    watchDarkClass();
 
     installEnterHandler();
     installKeyboardShortcuts();

@@ -138,6 +138,8 @@ def _fallback_css():
     .send-btn button { background: #3b82f6 !important; color: white !important; border: none !important; min-height: 34px !important; border-radius: 14px !important; }
     .msg-input { flex: 8 1 0 !important; min-width: 0 !important; }
     .msg-input textarea { height: 100% !important; min-height: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+    /* 强制禁用 Gradio 暗色模式 */
+    html:root.dark, html:root .dark, html.dark, html .dark { color-scheme: light !important; --body-background-fill: #ffffff !important; --background-fill-primary: #ffffff !important; --background-fill-secondary: #f8fafc !important; --body-text-color: #0f172a !important; --input-background-fill: #ffffff !important; --block-background-fill: #ffffff !important; --button-primary-background-fill: #3b82f6 !important; --button-secondary-background-fill: #f1f5f9 !important; --button-secondary-text-color: #0f172a !important; }
     /* 响应式回退 */
     @media screen and (max-width: 768px) {
         .main-row { flex-direction: column !important; }
@@ -527,7 +529,7 @@ def copy_chat_text():
 
 # ========== 5. 搭建界面 ==========
 
-with gr.Blocks(theme=gr.themes.Default()) as demo:
+with gr.Blocks() as demo:
     # 全局状态
     token_state = gr.State("")
     current_user = gr.State("")
@@ -737,5 +739,5 @@ if __name__ == "__main__":
     demo.queue()
     demo.launch(
         server_name="0.0.0.0", server_port=7860, inbrowser=True, css=css,
-        js=interactions_js,
+        js=interactions_js, theme=gr.themes.Default(),
     )

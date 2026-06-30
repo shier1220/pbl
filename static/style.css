@@ -52,6 +52,109 @@
   --sidebar-min-width: 200px;
 }
 
+/* 强制覆盖 Gradio 暗色模式变量（即使系统偏好暗色或 Gradio 给元素加了 .dark） */
+:root.dark,
+:root .dark,
+html.dark,
+html .dark,
+[data-theme="dark"] {
+  color-scheme: light !important;
+  --body-background-fill: #ffffff !important;
+  --body-text-color: #0f172a !important;
+  --color-accent-soft: #eff6ff !important;
+  --background-fill-primary: #ffffff !important;
+  --background-fill-secondary: #f8fafc !important;
+  --border-color-accent: #bfdbfe !important;
+  --border-color-primary: #e2e8f0 !important;
+  --link-text-color: #2563eb !important;
+  --link-text-color-active: #2563eb !important;
+  --link-text-color-hover: #1d4ed8 !important;
+  --link-text-color-visited: #3b82f6 !important;
+  --body-text-color-subdued: #64748b !important;
+  --accordion-text-color: #0f172a !important;
+  --table-text-color: #0f172a !important;
+  --shadow-spread: 3px !important;
+  --block-background-fill: #ffffff !important;
+  --block-border-color: #e2e8f0 !important;
+  --block-info-text-color: #64748b !important;
+  --block-label-background-fill: #f8fafc !important;
+  --block-label-border-color: #e2e8f0 !important;
+  --block-label-text-color: #475569 !important;
+  --block-title-text-color: #475569 !important;
+  --panel-background-fill: #f8fafc !important;
+  --panel-border-color: #e2e8f0 !important;
+  --border-color-accent-subdued: #bfdbfe !important;
+  --code-background-fill: #f1f5f9 !important;
+  --checkbox-background-color: #ffffff !important;
+  --checkbox-background-color-focus: #ffffff !important;
+  --checkbox-background-color-hover: #ffffff !important;
+  --checkbox-background-color-selected: #3b82f6 !important;
+  --checkbox-border-color: #d1d5db !important;
+  --checkbox-border-color-focus: #3b82f6 !important;
+  --checkbox-border-color-hover: #9ca3af !important;
+  --checkbox-border-color-selected: #3b82f6 !important;
+  --checkbox-border-width: 1px !important;
+  --checkbox-label-background-fill: #f1f5f9 !important;
+  --checkbox-label-background-fill-hover: #f1f5f9 !important;
+  --checkbox-label-background-fill-selected: #f1f5f9 !important;
+  --checkbox-label-border-color: #e2e8f0 !important;
+  --checkbox-label-border-color-hover: #e2e8f0 !important;
+  --checkbox-label-border-color-selected: #e2e8f0 !important;
+  --checkbox-label-border-width: 1px !important;
+  --checkbox-label-text-color: #0f172a !important;
+  --checkbox-label-text-color-selected: #0f172a !important;
+  --error-background-fill: #fef2f2 !important;
+  --error-border-color: #ef4444 !important;
+  --error-text-color: #991b1b !important;
+  --error-icon-color: #ef4444 !important;
+  --input-background-fill: #ffffff !important;
+  --input-background-fill-focus: #ffffff !important;
+  --input-background-fill-hover: #ffffff !important;
+  --input-border-color: #d1d5db !important;
+  --input-border-color-focus: #3b82f6 !important;
+  --input-border-color-hover: #d1d5db !important;
+  --input-border-width: 1px !important;
+  --input-placeholder-color: #9ca3af !important;
+  --input-shadow: none !important;
+  --input-shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  --input-text-color: #0f172a !important;
+  --loader-color: #3b82f6 !important;
+  --slider-color: #3b82f6 !important;
+  --stat-background-fill: linear-gradient(to right, #60a5fa, #3b82f6) !important;
+  --table-border-color: #e2e8f0 !important;
+  --table-even-background-fill: #ffffff !important;
+  --table-odd-background-fill: #f8fafc !important;
+  --table-row-focus: #eff6ff !important;
+  --button-border-width: 0px !important;
+  --button-cancel-background-fill: #ef4444 !important;
+  --button-cancel-background-fill-hover: #dc2626 !important;
+  --button-cancel-border-color: #e2e8f0 !important;
+  --button-cancel-border-color-hover: #e2e8f0 !important;
+  --button-cancel-text-color: #ffffff !important;
+  --button-cancel-text-color-hover: #ffffff !important;
+  --button-cancel-shadow: none !important;
+  --button-cancel-shadow-hover: none !important;
+  --button-cancel-shadow-active: none !important;
+  --button-primary-background-fill: #3b82f6 !important;
+  --button-primary-background-fill-hover: #2563eb !important;
+  --button-primary-border-color: #3b82f6 !important;
+  --button-primary-border-color-hover: #2563eb !important;
+  --button-primary-text-color: #ffffff !important;
+  --button-primary-text-color-hover: #ffffff !important;
+  --button-primary-shadow: none !important;
+  --button-primary-shadow-hover: none !important;
+  --button-primary-shadow-active: none !important;
+  --button-secondary-background-fill: #f1f5f9 !important;
+  --button-secondary-background-fill-hover: #e2e8f0 !important;
+  --button-secondary-border-color: #f1f5f9 !important;
+  --button-secondary-border-color-hover: #e2e8f0 !important;
+  --button-secondary-text-color: #0f172a !important;
+  --button-secondary-text-color-hover: #0f172a !important;
+  --button-secondary-shadow: none !important;
+  --button-secondary-shadow-hover: none !important;
+  --button-secondary-shadow-active: none !important;
+}
+
 /* ===== 1. 全局重置 ===== */
 /* 主题切换过渡 */
 html {
@@ -1000,4 +1103,4 @@ select:focus-visible {
   color: var(--color-text-secondary);
   vertical-align: middle;
 }
-/* .hidden-btn { display: none !important; } */
+.hidden-btn { height:0!important;min-height:0!important;overflow:hidden!important;padding:0!important;margin:0!important;border:0!important;opacity:0!important; }
