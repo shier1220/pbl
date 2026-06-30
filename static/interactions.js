@@ -383,74 +383,13 @@
 
   // ========== 8. 初始化 ==========
 
-  // ========== 7. 聊天消息操作（复制 / 删除 / 分享）==========
+  // ========== 9. 原生面板按钮 → 后端回调桥接 ==========
 
-  function injectMessageActions() {
-    var bubbles = document.querySelectorAll('#main-chatbot .bubble');
-    if (!bubbles.length) bubbles = document.querySelectorAll('#main-chatbot .message');
-    if (!bubbles.length) bubbles = document.querySelectorAll('#main-chatbot .bot, #main-chatbot .user');
-    if (!bubbles.length) return;
-
-    bubbles.forEach(function (bubble, i) {
-      if (bubble.querySelector('.msg-actions')) return;
-      bubble.style.position = 'relative';
-
-      var actions = document.createElement('span');
-      actions.className = 'msg-actions';
-
-      var copyBtn = createMsgIcon('📋', '复制');
-      copyBtn.onclick = function (e) { e.stopPropagation(); copyBubbleText(bubble); };
-      var delBtn = createMsgIcon('×', '删除');
-      delBtn.onclick = function (e) { e.stopPropagation(); deleteBubbleMsg(i); };
-      var shareBtn = createMsgIcon('🔗', '分享链接');
-      shareBtn.onclick = function (e) { e.stopPropagation(); shareBubbleMsg(i); };
-
-      actions.appendChild(copyBtn);
-      actions.appendChild(delBtn);
-      actions.appendChild(shareBtn);
-      bubble.appendChild(actions);
-    });
-    watchShareResult();
-  }
-
-  function createMsgIcon(text, title) {
-    var span = document.createElement('span');
-    span.className = 'msg-act-icon';
-    span.textContent = text;
-    span.title = title;
-    return span;
-  }
-
-  function copyBubbleText(bubble) {
-    var clone = bubble.cloneNode(true);
-    var actionsEl = clone.querySelector('.msg-actions');
-    if (actionsEl) actionsEl.remove();
-    var text = (clone.textContent || '').trim();
-    navigator.clipboard.writeText(text).then(function () {
-      window.showToast && window.showToast('已复制', 'success');
-    });
-  }
-
-  function deleteBubbleMsg(idx) {
-    if (!confirm('确定清空当前对话？')) return;
-    clickHiddenBtn('btn-clear-chat');
-  }
-
-  function shareBubbleMsg(idx) {
-    clickHiddenBtn('btn-share-chat');
-  }
-
-  function writeMsgBridge(action) {
-    var bridge = document.getElementById('msg-action-bridge');
-    if (!bridge) return;
-    var ta = bridge.querySelector('textarea') || bridge.querySelector('input');
-    if (!ta) return;
-    var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
-              || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    if (setter) setter.call(ta, action);
-    else ta.value = action;
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    ta.dispatchEvent(new Event('change', { bubbles: true }));
+  function clickHiddenBtn(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var btn = el.querySelector('button');
+    if (btn) btn.click();
   }
 
   var shareWatcherInstalled = false, lastShareVal = '';
@@ -490,53 +429,42 @@
     }, 500);
   }
 
-  
-  function clickHiddenBtn(id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var btn = el.querySelector('button');
-    if (btn) btn.click();
-  }
+  /** 
+   * 监听原生面板按钮点击，额外触发后端回调。
+   * 不 preventDefault / stopPropagation —— 让 Gradio 原生行为（复制/清空）正常执行。
+   * 只在"清空对话"时额外触发后端的 do_clear_chat 同步数据。
+   */
+  var _nativeBridgeInstalled = false;
+  function installNativePanelBridge() {
+    if (_nativeBridgeInstalled) return;
+    _nativeBridgeInstalled = true;
 
-  var _nativeListenerInstalled = false;
-  function interceptNativePanel() {
-    if (_nativeListenerInstalled) return;
-    _nativeListenerInstalled = true;
-    // 在 document 上捕获阶段监听（原来能用的方式）
     document.addEventListener('click', function (e) {
-      var panel = e.target.closest('.top-panel, .icon-button-wrapper');
-      if (!panel) return;
-      if (!panel.closest('#main-chatbot')) return;
+      // 只处理 #main-chatbot 内部的面板按钮
+      if (!e.target.closest('#main-chatbot')) return;
+
       var btn = e.target.closest('button');
-      if (!btn) return;
-      var label = btn.getAttribute('aria-label') || '';
-      if (label === '\u6e05\u7a7a\u5bf9\u8bdd' || label === 'Clear conversation') {
-        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-        clickHiddenBtn('btn-clear-chat');
-      } else if (label === 'Copy conversation' || label === '\u590d\u5236\u5bf9\u8bdd') {
-        // pass
-      } else if (!label) {
-        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-        clickHiddenBtn('btn-share-chat');
+      if (!btn) {
+        // 可能是 SVG icon 被点击
+        btn = e.target.closest('svg') && e.target.closest('svg').closest('button');
+        if (!btn) return;
       }
-    }, true);
+
+      var label = btn.getAttribute('aria-label') || btn.textContent || '';
+      // Gradio 6.x bubble 面板"清空对话"按钮 aria-label 为 "清空对话" 或 "Clear conversation"
+      if (label === '清空对话' || label === 'Clear conversation') {
+        // 不阻止原生行为 —— Gradio 自己会清空本地显示
+        // 额外触发后端清除，确保 session 数据同步
+        setTimeout(function () {
+          clickHiddenBtn('btn-clear-chat');
+        }, 150);
+      }
+    }, false); // 冒泡阶段，不干扰 Gradio
   }
 
   function initMessageActions() {
-    injectMessageActions();
     watchShareResult();
-    interceptNativePanel();
-    var retries = 0;
-    var timer = setInterval(function () {
-      injectMessageActions();
-      interceptNativePanel();
-      if (++retries > 30) clearInterval(timer);
-    }, 500);
-    new MutationObserver(function () {
-      injectMessageActions();
-      interceptNativePanel();
-      clearInterval(timer);
-    }).observe(document.body, { childList: true, subtree: true });
+    installNativePanelBridge();
   }
 
   // ── init ──

@@ -610,51 +610,6 @@ div[id*="sidebar"],
   color: #dc2626;
 }
 
-/* 每条消息的自定义操作按钮（复制/删除/分享）*/
-.msg-actions {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  z-index: 5;
-}
-
-.bubble:hover .msg-actions,
-.message:hover .msg-actions,
-#main-chatbot .message-wrap:hover .msg-actions {
-  opacity: 1;
-}
-
-.msg-act-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  background: rgba(255,255,255,0.85);
-  color: #666;
-  transition: background 0.15s, color 0.15s;
-  user-select: none;
-}
-
-.msg-act-icon:hover {
-  background: #e0e7ff;
-  color: #4f46e5;
-}
-
-/* 隐藏 Gradio 原生消息面板（由自定义操作按钮替代） */
-#main-chatbot .top-panel,
-#main-chatbot .icon-button-wrapper,
-#main-chatbot [class*="panel-container"] {
-  display: none !important;
-}
-
 /* ===== 6. 输入区 ===== */
 .input-row {
   background: var(--color-input-bg);
