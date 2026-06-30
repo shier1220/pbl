@@ -345,17 +345,8 @@
     console.log("[交互] 聊天界面可见性监听已安装");
   }
 
-  // ========== 7. 暗色模式 — 已禁用，始终亮色 ==========
 
-  function initThemeToggle() {
-    // 强制亮色：清除可能残留的暗色属性 + localStorage 标记
-    document.documentElement.removeAttribute("data-theme");
-    localStorage.removeItem("pbl_theme");
-  }
-
-  // ========== 8. 初始化 ==========
-
-  // ========== 9. 原生面板按钮 → 后端回调桥接 ==========
+  // ========== 7. 原生面板按钮 → 后端回调桥接 ==========
 
   function clickHiddenBtn(id) {
     var el = document.getElementById(id);
@@ -413,12 +404,16 @@
     if (initialized) return;
     initialized = true;
 
+    // 强制始终使用亮色模式（覆盖系统/浏览器暗色偏好）
+    document.documentElement.style.colorScheme = "light";
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.removeItem("pbl_theme");
+
     installEnterHandler();
     installKeyboardShortcuts();
     initDeleteIcons();
     initMessageActions();
     watchChatVisibility();
-    initThemeToggle();
 
     // 监听 DOM 变化，持续安装 Enter 处理器（处理动态渲染）
     const observer = new MutationObserver(() => {

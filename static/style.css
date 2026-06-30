@@ -6,8 +6,11 @@
 
 /* ===== 0. CSS 自定义属性（主题变量）===== */
 :root {
+  /* 强制系统使用亮色模式（阻止 Gradio 跟随浏览器暗色偏好） */
+  color-scheme: light;
+
   /* 亮色主题 */
-  --color-topbar: #1e293b;
+  --color-topbar: #f1f5f9;
   --color-sidebar-bg: #f8fafc;
   --color-sidebar-text: #475569;
   --color-accent-teal: #5eead4;
@@ -91,9 +94,10 @@ footer, .footer {
 /* ===== 2. 顶栏 ===== */
 .top-bar {
   background: var(--color-topbar) !important;
-  color: var(--color-white) !important;
+  color: var(--color-text-primary) !important;
   padding: 8px var(--space-md);
   border-radius: 0;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -108,7 +112,7 @@ footer, .footer {
 .top-bar div,
 .top-bar .prose,
 .top-bar .prose p {
-  color: var(--color-white) !important;
+  color: var(--color-text-primary) !important;
 }
 
 .top-bar-title {
@@ -121,8 +125,8 @@ footer, .footer {
 .exit-btn button,
 .exit-btn [role="button"] {
   background: transparent !important;
-  color: var(--color-white) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid rgba(15, 23, 42, 0.2) !important;
   border-radius: var(--radius-sm) !important;
   width: 60px !important;
   min-width: 60px !important;
@@ -140,35 +144,8 @@ footer, .footer {
 
 .exit-btn button:hover,
 .exit-btn [role="button"]:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
-}
-
-/* 暗色模式切换按钮 */
-.theme-btn,
-.theme-btn button,
-.theme-btn [role="button"] {
-  background: transparent !important;
-  color: var(--color-white) !important;
-  border: 1px solid rgba(255, 255, 255, 0.4) !important;
-  border-radius: var(--radius-sm) !important;
-  width: 36px !important;
-  min-width: 36px !important;
-  height: 32px !important;
-  min-height: 32px !important;
-  font-size: 16px !important;
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  cursor: pointer !important;
-  transition: all var(--transition-fast);
-}
-
-.theme-btn button:hover,
-.theme-btn [role="button"]:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.6) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
 /* ===== 3. 登录表单 ===== */

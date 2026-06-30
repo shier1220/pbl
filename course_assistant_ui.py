@@ -120,8 +120,8 @@ def _fallback_css():
     html, body { margin: 0 !important; padding: 0 !important; }
     .gradio-container, .block-container { margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
     footer, .footer { display: none !important; }
-    .top-bar { background: #1e293b !important; color: white !important; padding: 8px 16px; display: flex; justify-content: space-between; }
-    .top-bar, .top-bar p, .top-bar span, .top-bar div, .top-bar .prose, .top-bar .prose p { color: white !important; }
+    .top-bar { background: #f1f5f9 !important; color: #0f172a !important; padding: 8px 16px; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; }
+    .top-bar, .top-bar p, .top-bar span, .top-bar div, .top-bar .prose, .top-bar .prose p { color: #0f172a !important; }
     .top-bar-title { margin-left: auto !important; flex-shrink: 0 !important; }
     .sidebar { background: #f8fafc !important; padding: 0 16px !important; min-height: calc(100vh - 64px) !important; }
     .sidebar-new { flex: 0 0 auto !important; min-height: 32px !important; padding: 0 12px !important; }
@@ -131,7 +131,7 @@ def _fallback_css():
     .history-divider { width: 100% !important; height: 2px !important; background: #5eead4 !important; display: block !important; }
     .sidebar-list { flex: 0 0 70% !important; overflow-y: auto !important; padding: 4px 0 !important; }
     .session-radio { width: 100% !important; }
-    .exit-btn button { background: transparent !important; color: white !important; border: 1px solid rgba(255,255,255,0.4) !important; border-radius: 6px !important; width: 60px !important; height: 32px !important; font-size: 13px !important; }
+    .exit-btn button { background: transparent !important; color: #0f172a !important; border: 1px solid rgba(15,23,42,0.2) !important; border-radius: 6px !important; width: 60px !important; height: 32px !important; font-size: 13px !important; }
     .chat-area { background: white; padding: 0; min-height: calc(100vh - 64px); box-sizing: border-box; display: flex !important; flex-direction: column !important; }
     .main-row { min-height: calc(100vh - 64px); align-items: stretch; gap: 0 !important; }
     .input-row { background: white; border: 1px solid #d1d5db; border-radius: 28px; padding: 4px 8px; display: flex; align-items: center; gap: 8px; flex: 0 0 10% !important; margin-bottom: 10px !important; }
@@ -533,7 +533,7 @@ def copy_chat_text():
 
 # ========== 5. 搭建界面 ==========
 
-with gr.Blocks() as demo:
+with gr.Blocks(theme=gr.themes.Default()) as demo:
     # 全局状态
     token_state = gr.State("")
     current_user = gr.State("")
