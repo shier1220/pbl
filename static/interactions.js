@@ -261,69 +261,63 @@
   window.showThinkingIndicator = showThinkingIndicator;
   window.hideThinkingIndicator = hideThinkingIndicator;
 
-  // ========== 6. 会话列表 hover 删除按钮 ==========
+  // ========== 6. 会话列表 hover 删除 x 注入 ==========
 
-  let sessionDeleteObserver = null;
+  function injectDeleteIcons() {
+    var labels = document.querySelectorAll('#session-radio-list label');
+    if (!labels.length) {
+      // Gradio 可能用不同的包装结构
+      labels = document.querySelectorAll('.session-radio label');
+    }
+    if (!labels.length) return;
 
-  function injectSessionDeleteButtons() {
-    const radioItems = document.querySelectorAll('.session-radio [role="radio"], .session-radio label');
-    if (!radioItems.length) return;
+    labels.forEach(function (label) {
+      if (label.querySelector('.session-del-x')) return;
 
-    radioItems.forEach((item) => {
-      // 避免重复注入
-      if (item.querySelector('.session-delete-icon')) return;
+      // 确保 label 是 relative 定位
+      label.style.position = 'relative';
 
-      const icon = document.createElement('span');
-      icon.className = 'session-delete-icon';
-      icon.innerHTML = '🗑';
-      icon.title = '删除会话';
-      icon.setAttribute('role', 'button');
-      icon.setAttribute('aria-label', '删除会话');
-      icon.setAttribute('tabindex', '0');
+      var x = document.createElement('span');
+      x.className = 'session-del-x';
+      x.textContent = '\u00d7';  // ×
+      x.title = '删除会话';
 
-      icon.addEventListener('click', (e) => {
+      x.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
+        if (!confirm('确定删除该会话？')) return;
 
-        // 先选中该会话
-        item.click();
+        // 第一步：选中该会话的 radio input
+        var radio = label.querySelector('input[type="radio"]');
+        if (radio) radio.click();
 
-        // 短暂延迟后触发原删除按钮
-        setTimeout(() => {
-          const deleteBtn = document.querySelector('#delete-session-btn button, .delete-btn button');
-          if (deleteBtn) deleteBtn.click();
-        }, 60);
+        // 第二步：延迟点击隐藏的删除按钮触发 Python 回调
+        setTimeout(function () {
+          var btn = document.querySelector('#session-delete-btn button');
+          if (!btn) {
+            var allBtns = document.querySelectorAll('button');
+            for (var i = 0; i < allBtns.length; i++) {
+              if (allBtns[i].textContent.indexOf('删除') !== -1) {
+                btn = allBtns[i]; break;
+              }
+            }
+          }
+          if (btn) btn.click();
+        }, 200);
       });
 
-      // 键盘 Enter 删除
-      icon.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          icon.click();
-        }
-      });
-
-      item.appendChild(icon);
+      label.appendChild(x);
     });
   }
 
-  function initSessionDeleteButtons() {
-    injectSessionDeleteButtons();
-
-    if (sessionDeleteObserver) return;
-
-    sessionDeleteObserver = new MutationObserver(() => {
-      injectSessionDeleteButtons();
+  // 立即尝试 + MutationObserver 兜底（Radio 可能异步渲染）
+  function initDeleteIcons() {
+    injectDeleteIcons();
+    var observer = new MutationObserver(function () {
+      injectDeleteIcons();
     });
-
-    const radioList = document.querySelector('.session-radio, #session-radio-list');
-    if (radioList) {
-      sessionDeleteObserver.observe(radioList, { childList: true, subtree: true });
-    } else {
-      // 如果 radio 还没渲染，先监听 body
-      sessionDeleteObserver.observe(document.body, { childList: true, subtree: true });
-    }
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // ========== 7. 聊天界面可见性监听（登录后自动聚焦）==========
@@ -389,6 +383,164 @@
 
   // ========== 8. 初始化 ==========
 
+  // ========== 7. 聊天消息操作（复制 / 删除 / 分享）==========
+
+  function injectMessageActions() {
+    var bubbles = document.querySelectorAll('#main-chatbot .bubble');
+    if (!bubbles.length) bubbles = document.querySelectorAll('#main-chatbot .message');
+    if (!bubbles.length) bubbles = document.querySelectorAll('#main-chatbot .bot, #main-chatbot .user');
+    if (!bubbles.length) return;
+
+    bubbles.forEach(function (bubble, i) {
+      if (bubble.querySelector('.msg-actions')) return;
+      bubble.style.position = 'relative';
+
+      var actions = document.createElement('span');
+      actions.className = 'msg-actions';
+
+      var copyBtn = createMsgIcon('📋', '复制');
+      copyBtn.onclick = function (e) { e.stopPropagation(); copyBubbleText(bubble); };
+      var delBtn = createMsgIcon('×', '删除');
+      delBtn.onclick = function (e) { e.stopPropagation(); deleteBubbleMsg(i); };
+      var shareBtn = createMsgIcon('🔗', '分享链接');
+      shareBtn.onclick = function (e) { e.stopPropagation(); shareBubbleMsg(i); };
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(delBtn);
+      actions.appendChild(shareBtn);
+      bubble.appendChild(actions);
+    });
+    watchShareResult();
+  }
+
+  function createMsgIcon(text, title) {
+    var span = document.createElement('span');
+    span.className = 'msg-act-icon';
+    span.textContent = text;
+    span.title = title;
+    return span;
+  }
+
+  function copyBubbleText(bubble) {
+    var clone = bubble.cloneNode(true);
+    var actionsEl = clone.querySelector('.msg-actions');
+    if (actionsEl) actionsEl.remove();
+    var text = (clone.textContent || '').trim();
+    navigator.clipboard.writeText(text).then(function () {
+      window.showToast && window.showToast('已复制', 'success');
+    });
+  }
+
+  function deleteBubbleMsg(idx) {
+    if (!confirm('确定清空当前对话？')) return;
+    clickHiddenBtn('btn-clear-chat');
+  }
+
+  function shareBubbleMsg(idx) {
+    clickHiddenBtn('btn-share-chat');
+  }
+
+  function writeMsgBridge(action) {
+    var bridge = document.getElementById('msg-action-bridge');
+    if (!bridge) return;
+    var ta = bridge.querySelector('textarea') || bridge.querySelector('input');
+    if (!ta) return;
+    var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+              || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    if (setter) setter.call(ta, action);
+    else ta.value = action;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  var shareWatcherInstalled = false, lastShareVal = '';
+  function watchShareResult() {
+    if (shareWatcherInstalled) return;
+    shareWatcherInstalled = true;
+    setInterval(function () {
+      var el = document.getElementById('share-result');
+      if (!el) return;
+      var ta = el.querySelector('textarea') || el.querySelector('input');
+      if (!ta) return;
+      var val = ta.value;
+      if (!val || val === lastShareVal) return;
+      lastShareVal = val;
+      if (val.startsWith('http')) {
+        navigator.clipboard.writeText(val).then(function () {
+          window.showToast && window.showToast('分享链接已复制！', 'success');
+        });
+      } else if (val.trim().startsWith('#')) {
+        var blob = new Blob([val], { type: 'text/markdown;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '对话导出_' + new Date().toISOString().slice(0,10) + '.md';
+        a.click(); URL.revokeObjectURL(a.href);
+      } else if (val.length > 10 && !val.startsWith('⚠')) {
+        navigator.clipboard.writeText(val).then(function () {
+          window.showToast && window.showToast('已复制到剪贴板', 'success');
+        });
+      } else if (val.startsWith('⚠')) {
+        window.showToast && window.showToast(val, 'error');
+      }
+      var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+                || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      if (setter) setter.call(ta, '');
+      else ta.value = '';
+      lastShareVal = '';
+    }, 500);
+  }
+
+  
+  function clickHiddenBtn(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var btn = el.querySelector('button');
+    if (btn) btn.click();
+  }
+
+  var _nativeListenerInstalled = false;
+  function interceptNativePanel() {
+    if (_nativeListenerInstalled) return;
+    _nativeListenerInstalled = true;
+    // 在 document 上捕获阶段监听（原来能用的方式）
+    document.addEventListener('click', function (e) {
+      var panel = e.target.closest('.top-panel, .icon-button-wrapper');
+      if (!panel) return;
+      if (!panel.closest('#main-chatbot')) return;
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var label = btn.getAttribute('aria-label') || '';
+      if (label === '\u6e05\u7a7a\u5bf9\u8bdd' || label === 'Clear conversation') {
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        clickHiddenBtn('btn-clear-chat');
+      } else if (label === 'Copy conversation' || label === '\u590d\u5236\u5bf9\u8bdd') {
+        // pass
+      } else if (!label) {
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        clickHiddenBtn('btn-share-chat');
+      }
+    }, true);
+  }
+
+  function initMessageActions() {
+    injectMessageActions();
+    watchShareResult();
+    interceptNativePanel();
+    var retries = 0;
+    var timer = setInterval(function () {
+      injectMessageActions();
+      interceptNativePanel();
+      if (++retries > 30) clearInterval(timer);
+    }, 500);
+    new MutationObserver(function () {
+      injectMessageActions();
+      interceptNativePanel();
+      clearInterval(timer);
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  // ── init ──
+
   let initialized = false;
 
   function init() {
@@ -397,7 +549,8 @@
 
     installEnterHandler();
     installKeyboardShortcuts();
-    initSessionDeleteButtons();
+    initDeleteIcons();
+    initMessageActions();
     watchChatVisibility();
     initThemeToggle();
 
