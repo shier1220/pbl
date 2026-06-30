@@ -345,40 +345,12 @@
     console.log("[交互] 聊天界面可见性监听已安装");
   }
 
-  // ========== 7. 暗色模式切换 ==========
+  // ========== 7. 暗色模式 — 已禁用，始终亮色 ==========
 
   function initThemeToggle() {
-    // 从 localStorage 读取主题偏好
-    const savedTheme = localStorage.getItem("pbl_theme");
-    if (savedTheme === "dark") {
-      document.documentElement.setAttribute("data-theme", "dark");
-    }
-
-    // 监听暗色模式按钮点击
-    waitFor(".theme-btn button", 5000)
-      .then((btn) => {
-        // 初始化按钮文字
-        updateThemeButton(btn);
-
-        btn.addEventListener("click", () => {
-          const current = document.documentElement.getAttribute("data-theme");
-          const next = current === "dark" ? "light" : "dark";
-          document.documentElement.setAttribute("data-theme", next);
-          localStorage.setItem("pbl_theme", next);
-          updateThemeButton(btn);
-        });
-
-        console.log("[交互] 暗色模式切换已安装");
-      })
-      .catch(() => {
-        console.log("[交互] 暗色模式按钮未找到（可能尚未登录）");
-      });
-  }
-
-  function updateThemeButton(btn) {
-    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-    btn.textContent = isDark ? "☀️" : "🌙";
-    btn.setAttribute("aria-label", isDark ? "切换亮色模式" : "切换暗色模式");
+    // 强制亮色：清除可能残留的暗色属性 + localStorage 标记
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.removeItem("pbl_theme");
   }
 
   // ========== 8. 初始化 ==========

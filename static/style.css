@@ -49,31 +49,6 @@
   --sidebar-min-width: 200px;
 }
 
-/* 暗色主题 */
-[data-theme="dark"] {
-  --color-topbar: #0f172a;
-  --color-sidebar-bg: #1e293b;
-  --color-sidebar-text: #94a3b8;
-  --color-accent-teal: #2dd4bf;
-  --color-accent-blue: #60a5fa;
-  --color-accent-blue-hover: #3b82f6;
-  --color-chat-bg: #0f172a;
-  --color-input-border: #334155;
-  --color-input-bg: #1e293b;
-  --color-white: #f1f5f9;
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
-  --color-border: #334155;
-  --color-hover: rgba(96, 165, 250, 0.1);
-  --color-selected: rgba(96, 165, 250, 0.15);
-  --color-chatbot-msg-bg: #1e293b;
-  --color-login-card-bg: #1e293b;
-  --color-login-card-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
-  --color-toast-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  --shimmer-base: #334155;
-  --shimmer-highlight: #475569;
-}
-
 /* ===== 1. 全局重置 ===== */
 /* 主题切换过渡 */
 html {
