@@ -26,4 +26,7 @@ sessions.json
 .claude/
 .learnings/
 .sessions/
-static/
+# 静态资源目录
+static/*
+!static/style.css
+!static/interactions.js

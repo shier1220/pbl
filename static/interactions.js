@@ -1,0 +1,419 @@
+/**
+ * Course Assistant — 交互增强脚本 v2.0
+ * 
+ * 功能：
+ * 1. Enter 发送 / Shift+Enter 换行
+ * 2. 自动聚焦消息输入框
+ * 3. Toast 通知系统
+ * 4. 键盘快捷键 (Ctrl+N 新建, Ctrl+数字 切换会话)
+ * 5. 加载状态指示器
+ * 6. 会话列表 hover 删除按钮
+ * 7. 聊天界面可见性监听（登录后自动聚焦）
+ * 8. 暗色模式切换
+ */
+
+(function () {
+  "use strict";
+
+  // ========== 工具函数 ==========
+
+  /** 等待 DOM 中出现匹配的元素 */
+  function waitFor(selector, timeout = 8000) {
+    return new Promise((resolve, reject) => {
+      const el = document.querySelector(selector);
+      if (el) return resolve(el);
+
+      const observer = new MutationObserver(() => {
+        const el = document.querySelector(selector);
+        if (el) {
+          observer.disconnect();
+          resolve(el);
+        }
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      setTimeout(() => {
+        observer.disconnect();
+        reject(new Error(`等待超时: ${selector}`));
+      }, timeout);
+    });
+  }
+
+  /** 查找 Gradio 的 textarea */
+  function findMessageTextarea() {
+    // Gradio Textbox 渲染为一个容器，内含 textarea
+    const textareas = document.querySelectorAll('textarea[data-testid="textbox"]');
+    if (textareas.length > 0) return textareas[textareas.length - 1];
+
+    // 回退：找所有可见 textarea
+    const allTextareas = document.querySelectorAll('textarea:not([style*="display: none"])');
+    for (const ta of allTextareas) {
+      if (ta.offsetParent !== null && ta.placeholder && ta.placeholder.includes("消息")) {
+        return ta;
+      }
+    }
+    return allTextareas[allTextareas.length - 1] || null;
+  }
+
+  /** 查找发送按钮 */
+  function findSendButton() {
+    // 查找包含"发送"文字的按钮
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      if (btn.textContent && btn.textContent.includes("发送")) {
+        return btn;
+      }
+    }
+    return null;
+  }
+
+  // ========== 1. Enter 发送 / Shift+Enter 换行 ==========
+
+  let enterBound = false;
+
+  function installEnterHandler() {
+    if (enterBound) return;
+    enterBound = true;
+
+    // 使用 capture 阶段，确保在 Gradio 内部处理器之前拦截
+    document.addEventListener("keydown", function (e) {
+      const textarea = findMessageTextarea();
+      if (!textarea) return;
+
+      // 只处理聚焦在消息输入框时
+      if (document.activeElement !== textarea) return;
+
+      // 忽略 IME 输入法组合中的 Enter
+      if (e.isComposing || e.keyCode === 229) return;
+
+      // Enter 发送（不按 Shift/Ctrl/Meta）
+      if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const sendBtn = findSendButton();
+        if (sendBtn) {
+          sendBtn.click();
+        }
+      }
+    }, true); // capture: true — 在冒泡前拦截
+
+    console.log("[交互] Enter 发送 / Shift+Enter 换行 已安装");
+  }
+
+  // ========== 2. 自动聚焦消息输入框 ==========
+
+  function autoFocusMessageInput() {
+    setTimeout(() => {
+      const textarea = findMessageTextarea();
+      if (textarea) {
+        textarea.focus();
+        console.log("[交互] 消息输入框已自动聚焦");
+      }
+    }, 300);
+  }
+
+  // ========== 3. Toast 通知系统 ==========
+
+  /** 显示 Toast 通知 */
+  function showToast(message, type = "info", duration = 3000) {
+    // 移除旧 toast
+    const oldToast = document.querySelector(".wb-toast");
+    if (oldToast) oldToast.remove();
+
+    const toast = document.createElement("div");
+    toast.className = `wb-toast wb-toast-${type}`;
+    toast.innerHTML = message;
+
+    // 样式
+    const colors = {
+      success: { bg: "#ecfdf5", border: "#6ee7b7", text: "#065f46" },
+      error: { bg: "#fef2f2", border: "#fca5a5", text: "#991b1b" },
+      warning: { bg: "#fffbeb", border: "#fcd34d", text: "#92400e" },
+      info: { bg: "#eff6ff", border: "#93c5fd", text: "#1e40af" },
+    };
+    const c = colors[type] || colors.info;
+
+    Object.assign(toast.style, {
+      position: "fixed",
+      top: "16px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      padding: "10px 20px",
+      background: c.bg,
+      border: `1px solid ${c.border}`,
+      color: c.text,
+      borderRadius: "8px",
+      fontSize: "13px",
+      fontWeight: "500",
+      zIndex: "9999",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+      opacity: "0",
+      transition: "opacity 200ms ease, transform 200ms ease",
+      maxWidth: "90vw",
+      textAlign: "center",
+    });
+
+    document.body.appendChild(toast);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateX(-50%) translateY(0)";
+    });
+
+    // 自动消失
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateX(-50%) translateY(-8px)";
+      setTimeout(() => toast.remove(), 200);
+    }, duration);
+  }
+
+  // 暴露到 window（Python 可通过 JS 调用）
+  window.showToast = showToast;
+
+  // ========== 4. 键盘快捷键 ==========
+
+  function installKeyboardShortcuts() {
+    document.addEventListener("keydown", function (e) {
+      // 不在输入框内时生效
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      // Ctrl+N / Cmd+N：新建对话
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        const newBtn = document.querySelector('.new-btn button, button:has(span:contains("＋ 新建"))');
+        if (newBtn) newBtn.click();
+      }
+
+      // Ctrl+数字：切换会话
+      if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        const radios = document.querySelectorAll('.session-radio [role="radio"], .session-radio input[type="radio"]');
+        if (radios[idx]) radios[idx].click();
+      }
+    });
+
+    console.log("[交互] 键盘快捷键已安装");
+  }
+
+  // ========== 5. 加载状态指示器 ==========
+
+  /** 在消息区域显示"思考中"指示器 */
+  function showThinkingIndicator() {
+    const chatbot = document.querySelector(".chatbot");
+    if (!chatbot) return;
+
+    // 检查是否已有指示器
+    if (document.querySelector(".typing-indicator")) return;
+
+    const indicator = document.createElement("div");
+    indicator.className = "typing-indicator";
+    indicator.innerHTML = `
+      <span></span><span></span><span></span>
+    `;
+
+    // 内联样式
+    const style = document.createElement("style");
+    style.textContent = `
+      .typing-indicator {
+        display: flex;
+        gap: 4px;
+        padding: 8px 16px;
+        margin: 8px 0;
+      }
+      .typing-indicator span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #93c5fd;
+        animation: typingBounce 1.4s infinite ease-in-out both;
+      }
+      .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+      .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+      .typing-indicator span:nth-child(3) { animation-delay: 0s; }
+      @keyframes typingBounce {
+        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+        40% { transform: scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    const messagesContainer = chatbot.querySelector(".messages, .message-wrap, [class*='messages']");
+    if (messagesContainer) {
+      messagesContainer.appendChild(indicator);
+    } else {
+      chatbot.appendChild(indicator);
+    }
+  }
+
+  /** 隐藏"思考中"指示器 */
+  function hideThinkingIndicator() {
+    const indicator = document.querySelector(".typing-indicator");
+    if (indicator) indicator.remove();
+  }
+
+  window.showThinkingIndicator = showThinkingIndicator;
+  window.hideThinkingIndicator = hideThinkingIndicator;
+
+  // ========== 6. 会话列表 hover 删除按钮 ==========
+
+  let sessionDeleteObserver = null;
+
+  function injectSessionDeleteButtons() {
+    const radioItems = document.querySelectorAll('.session-radio [role="radio"], .session-radio label');
+    if (!radioItems.length) return;
+
+    radioItems.forEach((item) => {
+      // 避免重复注入
+      if (item.querySelector('.session-delete-icon')) return;
+
+      const icon = document.createElement('span');
+      icon.className = 'session-delete-icon';
+      icon.innerHTML = '🗑';
+      icon.title = '删除会话';
+      icon.setAttribute('role', 'button');
+      icon.setAttribute('aria-label', '删除会话');
+      icon.setAttribute('tabindex', '0');
+
+      icon.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        // 先选中该会话
+        item.click();
+
+        // 短暂延迟后触发原删除按钮
+        setTimeout(() => {
+          const deleteBtn = document.querySelector('#delete-session-btn button, .delete-btn button');
+          if (deleteBtn) deleteBtn.click();
+        }, 60);
+      });
+
+      // 键盘 Enter 删除
+      icon.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          icon.click();
+        }
+      });
+
+      item.appendChild(icon);
+    });
+  }
+
+  function initSessionDeleteButtons() {
+    injectSessionDeleteButtons();
+
+    if (sessionDeleteObserver) return;
+
+    sessionDeleteObserver = new MutationObserver(() => {
+      injectSessionDeleteButtons();
+    });
+
+    const radioList = document.querySelector('.session-radio, #session-radio-list');
+    if (radioList) {
+      sessionDeleteObserver.observe(radioList, { childList: true, subtree: true });
+    } else {
+      // 如果 radio 还没渲染，先监听 body
+      sessionDeleteObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  // ========== 7. 聊天界面可见性监听（登录后自动聚焦）==========
+
+  let chatVisibilityObserver = null;
+
+  function watchChatVisibility() {
+    if (chatVisibilityObserver) return;
+
+    chatVisibilityObserver = new MutationObserver(() => {
+      // 检查聊天界面是否变得可见
+      const chatColumn = document.querySelector('.chat-area');
+      if (chatColumn && chatColumn.offsetParent !== null) {
+        // 聊天界面可见，自动聚焦输入框
+        autoFocusMessageInput();
+      }
+    });
+
+    chatVisibilityObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+      subtree: true,
+    });
+
+    console.log("[交互] 聊天界面可见性监听已安装");
+  }
+
+  // ========== 7. 暗色模式切换 ==========
+
+  function initThemeToggle() {
+    // 从 localStorage 读取主题偏好
+    const savedTheme = localStorage.getItem("pbl_theme");
+    if (savedTheme === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+
+    // 监听暗色模式按钮点击
+    waitFor(".theme-btn button", 5000)
+      .then((btn) => {
+        // 初始化按钮文字
+        updateThemeButton(btn);
+
+        btn.addEventListener("click", () => {
+          const current = document.documentElement.getAttribute("data-theme");
+          const next = current === "dark" ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", next);
+          localStorage.setItem("pbl_theme", next);
+          updateThemeButton(btn);
+        });
+
+        console.log("[交互] 暗色模式切换已安装");
+      })
+      .catch(() => {
+        console.log("[交互] 暗色模式按钮未找到（可能尚未登录）");
+      });
+  }
+
+  function updateThemeButton(btn) {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    btn.textContent = isDark ? "☀️" : "🌙";
+    btn.setAttribute("aria-label", isDark ? "切换亮色模式" : "切换暗色模式");
+  }
+
+  // ========== 8. 初始化 ==========
+
+  let initialized = false;
+
+  function init() {
+    if (initialized) return;
+    initialized = true;
+
+    installEnterHandler();
+    installKeyboardShortcuts();
+    initSessionDeleteButtons();
+    watchChatVisibility();
+    initThemeToggle();
+
+    // 监听 DOM 变化，持续安装 Enter 处理器（处理动态渲染）
+    const observer = new MutationObserver(() => {
+      installEnterHandler();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log("[交互] 交互增强模块已初始化");
+  }
+
+  // DOM 就绪后初始化
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
