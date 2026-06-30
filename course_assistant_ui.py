@@ -84,10 +84,19 @@ def get_current():
     return all_sessions[-1] if all_sessions else make_session()
 
 
+def _truncate_title(title, max_len=12):
+    """统一截断标题，保证列表整齐"""
+    if len(title) > max_len:
+        return title[:max_len] + "…"
+    return title
+
+
 def get_session_choices():
+    """生成统一宽度的会话列表选项"""
     choices = []
     for s in reversed(all_sessions):
-        label = f"💬 {s['title']} ({s['created_at']})"
+        title = _truncate_title(s["title"])
+        label = f"💬 {title}  ({s['created_at']})"
         choices.append((label, s["id"]))
     return choices
 
@@ -141,17 +150,22 @@ css = _load_css()
 
 
 def _load_js():
-    """加载外部 JS 文件"""
+    """加载外部 JS 文件，返回纯 JS 文本（供 gr.Blocks js 参数）"""
     js_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "interactions.js")
     try:
         with open(js_path, "r", encoding="utf-8") as f:
-            return f"<script>{f.read()}</script>"
+            return f.read()
     except FileNotFoundError:
         print(f"[WARN] JS 文件未找到: {js_path}")
         return ""
 
 
 interactions_js = _load_js()
+
+def _load_js_wrapped():
+    """加载外部 JS 文件，返回 <script> 包裹（供 gr.HTML 注入）"""
+    js = _load_js()
+    return f"<script>{js}</script>" if js else ""
 
 # ========== 4. 回调函数 ==========
 
@@ -172,6 +186,8 @@ def do_login(username, password):
             load_user_sessions(username)
             token = data["access_token"]
             user = data["username"]
+            # 持久化 token 到文件（供删除会话等操作使用）
+            _save_token_to_file(username, token)
             js_code = f'<script>if(window.saveAuth)window.saveAuth("{token}","{user}");</script>'
             return token, user, "✅ 登录成功！", js_code
         return "", "", resp.json().get("detail", "登录失败"), ""
@@ -335,7 +351,8 @@ def respond(user_message, chatbot, file_context, token):
                 if done:
                     source = event.get("source", "unknown")
                     docs = event.get("docs", [])
-                    # 追加来源/模式标记（让用户看到意图路由结果）
+                    followup = event.get("followup", [])
+                    # 追加来源/模式标记
                     if source == "rag":
                         mode_note = f"\n\n📚 参考：{'、'.join(docs[:3])}"
                     elif source == "casual":
@@ -344,6 +361,12 @@ def respond(user_message, chatbot, file_context, token):
                         mode_note = ""
                     if mode_note:
                         ai_reply += mode_note
+                    # 追加后续推荐问题
+                    if followup:
+                        ai_reply += "\n\n💡 **你可能还想问：**\n"
+                        for q in followup:
+                            ai_reply += f"• {q}\n"
+                    if mode_note or followup:
                         sess["messages"][-1]["content"] = ai_reply
                         save_user_sessions(current_username)
                         yield "", sess["messages"], sess["file_context"]
@@ -382,10 +405,130 @@ def switch_session(session_id):
     global current_id
     current_id = session_id
     sess = get_current()
-    title = sess["title"]
-    if len(title) > 15:
-        title = title[:15] + "..."
     return sess["messages"], sess["file_context"]
+
+
+def _delete_session_on_backend(sid):
+    """调用后端 API 删除数据库中的会话数据"""
+    try:
+        token = _get_stored_token()
+        if not token:
+            return
+        headers = {"Authorization": f"Bearer {token}"}
+        httpx.delete(f"{API_BASE}/sessions/{sid}", headers=headers, timeout=5)
+    except Exception:
+        pass  # 后端不可达时静默忽略
+
+
+def _save_token_to_file(username, token):
+    """持久化 token 到文件"""
+    token_file = os.path.join(SESSIONS_DIR, f"{username}_token.txt")
+    try:
+        with open(token_file, "w") as f:
+            f.write(token)
+    except Exception:
+        pass
+
+
+def _get_stored_token():
+    """从文件读取持久化的 token"""
+    token_file = os.path.join(SESSIONS_DIR, f"{current_username}_token.txt")
+    try:
+        with open(token_file, "r") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def delete_current_session():
+    """删除当前选中的会话（前端本地 + 后端数据库）"""
+    global all_sessions, current_id
+    if len(all_sessions) <= 1:
+        return gr.update(choices=get_session_choices(), value=current_id), [], None
+    sid = current_id
+    all_sessions = [s for s in all_sessions if s["id"] != sid]
+    current_id = all_sessions[-1]["id"]
+    save_user_sessions(current_username)
+    # 同步删除后端数据库中的会话
+    _delete_session_on_backend(sid)
+    sess = get_current()
+    return (
+        gr.update(choices=get_session_choices(), value=current_id),
+        sess["messages"],
+        sess["file_context"],
+    )
+
+
+def do_clear_chat():
+    """清空当前会话消息（UI + 后端同步）"""
+    sess = get_current()
+    sess["messages"] = []
+    save_user_sessions(current_username)
+    return [], None
+
+
+def do_copy_chat():
+    """返回对话文本"""
+    return copy_chat_text()
+
+
+def do_share_chat():
+    """整个对话分享 → 返回分享链接（JS 轮询复制）"""
+    sess = get_current()
+    msgs = sess["messages"]
+    if not msgs:
+        return "⚠️ 暂无对话"
+
+    try:
+        token = _get_stored_token()
+        if not token:
+            return "⚠️ 请先登录"
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = httpx.post(
+            f"{API_BASE}/share",
+            json={"messages": msgs, "title": sess.get("title", "对话")},
+            headers=headers, timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return f"{API_BASE}{data['url']}"
+        return "⚠️ 分享失败"
+    except Exception as e:
+        return f"⚠️ {e}"
+
+
+def clear_chat():
+    """清空当前会话所有消息"""
+    sess = get_current()
+    sess["messages"] = []
+    save_user_sessions(current_username)
+    return [], None
+
+
+def export_chat_markdown():
+    """导出对话为 Markdown 文本"""
+    sess = get_current()
+    msgs = sess["messages"]
+    if not msgs:
+        return ""
+    lines = [f"# {sess['title']}", f"日期：{sess['created_at']}", "", "---", ""]
+    for m in msgs:
+        role = "**用户**" if m["role"] == "user" else "**小课**"
+        lines.append(f"{role}：\n{m['content']}\n")
+    return "\n".join(lines)
+
+
+def copy_chat_text():
+    """返回纯文本格式的对话（供 JS 复制）"""
+    sess = get_current()
+    msgs = sess["messages"]
+    if not msgs:
+        return ""
+    lines = []
+    for m in msgs:
+        role = "用户" if m["role"] == "user" else "小课"
+        lines.append(f"{role}：{m['content']}")
+    return "\n\n".join(lines)
 
 
 # ========== 5. 搭建界面 ==========
@@ -445,8 +588,7 @@ with gr.Blocks() as demo:
     </script>
     """, visible=False)
 
-    # 注入交互增强 JavaScript（visible=False 避免 script 标签裸露）
-    gr.HTML(interactions_js, visible=False)
+    # 交互 JS 已通过 gr.Blocks(js=...) 加载，无需额外注入
 
     # ========== 登录表单（默认显示）==========
     with gr.Column(visible=True, elem_classes="login-form") as login_form:
@@ -476,7 +618,6 @@ with gr.Blocks() as demo:
         with gr.Row(elem_classes="top-bar", elem_id="top-bar"):
             welcome_text = gr.Markdown("欢迎！", scale=8)
             exit_btn = gr.Button("退出", elem_classes="exit-btn", scale=0, min_width=60)
-            theme_btn = gr.Button("🌙", elem_classes="theme-btn", scale=0, min_width=36)
             gr.HTML('<div style="white-space:nowrap;font-weight:500;text-align:right;" role="heading" aria-level="1">🤖 AIGC咨询助手</div>', scale=1, elem_classes="top-bar-title")
 
         # 主体
@@ -499,16 +640,29 @@ with gr.Blocks() as demo:
                         elem_classes="session-radio",
                         elem_id="session-radio-list",
                     )
+                    delete_btn = gr.Button(
+                        "🗑 删除会话",
+                        elem_classes="delete-session-btn",
+                        elem_id="session-delete-btn",
+                        variant="stop",
+                        size="sm",
+                    )
 
             # 聊天区
             with gr.Column(scale=8, elem_classes="chat-area", elem_id="chat-area"):
                 gr.Markdown("## 欢迎使用AIGC咨询助手", elem_classes="chat-title")
+
+                # 聊天室工具栏按钮（出现在 Chatbot 右上角原生面板）
+                _toolbar_clear = gr.Button("🗑 清空对话", size="sm")
+                _toolbar_share = gr.Button("🔗 分享链接", size="sm")
+
                 chatbot = gr.Chatbot(
                     layout="bubble", feedback_options=None,
                     value=get_current()["messages"],
                     elem_id="main-chatbot",
                     label="对话区",
                     show_label=False,
+                    buttons=["copy_all", _toolbar_clear, _toolbar_share],
                 )
 
                 with gr.Row(elem_classes="input-row"):
@@ -529,6 +683,11 @@ with gr.Blocks() as demo:
                     )
                     send_btn = gr.Button("📤 发送", elem_classes="send-btn", elem_id="send-message-btn")
 
+        # 隐藏桥接（CSS 隐藏但保持 DOM 事件）
+        _share_result = gr.Textbox(value="", elem_classes="hidden-btn", elem_id="share-result")
+        _btn_clear = gr.Button("clear", elem_classes="hidden-btn", elem_id="btn-clear-chat")
+        _btn_share = gr.Button("share", elem_classes="hidden-btn", elem_id="btn-share-chat")
+
     # ========== 6. 绑定事件 ==========
     # 登录成功 → 隐藏登录表单，显示聊天界面
     def on_login_success(token, username, js_code):
@@ -539,8 +698,8 @@ with gr.Blocks() as demo:
                 gr.update(visible=True),   # 显示聊天界面
                 f"欢迎，{username}！",      # 更新欢迎语
                 js_code,                    # 执行 JS 保存 token（隐藏组件）
-                gr.update(choices=get_session_choices(), value=current_id),  # 更新会话列表
-                sess["messages"]            # 更新聊天界面
+                gr.update(choices=get_session_choices(), value=current_id),
+                sess["messages"]
             )
         return (
             gr.update(visible=True),
@@ -575,6 +734,14 @@ with gr.Blocks() as demo:
     new_btn.click(new_conversation, [], [chatbot, file_ctx, session_radio])
     upload_btn.upload(on_upload, [upload_btn, chatbot, token_state], [file_ctx, chatbot])
     session_radio.change(switch_session, [session_radio], [chatbot, file_ctx])
+    delete_btn.click(delete_current_session, [], [session_radio, chatbot, file_ctx])
+    _btn_clear.click(do_clear_chat, [], [chatbot, file_ctx])
+    _btn_share.click(do_share_chat, [], [_share_result])
+
+    # 原生工具栏按钮
+    _toolbar_clear.click(do_clear_chat, [], [chatbot, file_ctx])
+    _toolbar_share.click(do_share_chat, [], [_share_result])
+    chatbot.clear(do_clear_chat, [], [chatbot, file_ctx])
 
 
 
@@ -583,4 +750,5 @@ if __name__ == "__main__":
     demo.queue()
     demo.launch(
         server_name="0.0.0.0", server_port=7860, inbrowser=True, css=css,
+        js=interactions_js,
     )

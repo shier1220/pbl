@@ -429,42 +429,8 @@
     }, 500);
   }
 
-  /** 
-   * 监听原生面板按钮点击，额外触发后端回调。
-   * 不 preventDefault / stopPropagation —— 让 Gradio 原生行为（复制/清空）正常执行。
-   * 只在"清空对话"时额外触发后端的 do_clear_chat 同步数据。
-   */
-  var _nativeBridgeInstalled = false;
-  function installNativePanelBridge() {
-    if (_nativeBridgeInstalled) return;
-    _nativeBridgeInstalled = true;
-
-    document.addEventListener('click', function (e) {
-      // 只处理 #main-chatbot 内部的面板按钮
-      if (!e.target.closest('#main-chatbot')) return;
-
-      var btn = e.target.closest('button');
-      if (!btn) {
-        // 可能是 SVG icon 被点击
-        btn = e.target.closest('svg') && e.target.closest('svg').closest('button');
-        if (!btn) return;
-      }
-
-      var label = btn.getAttribute('aria-label') || btn.textContent || '';
-      // Gradio 6.x bubble 面板"清空对话"按钮 aria-label 为 "清空对话" 或 "Clear conversation"
-      if (label === '清空对话' || label === 'Clear conversation') {
-        // 不阻止原生行为 —— Gradio 自己会清空本地显示
-        // 额外触发后端清除，确保 session 数据同步
-        setTimeout(function () {
-          clickHiddenBtn('btn-clear-chat');
-        }, 150);
-      }
-    }, false); // 冒泡阶段，不干扰 Gradio
-  }
-
   function initMessageActions() {
     watchShareResult();
-    installNativePanelBridge();
   }
 
   // ── init ──
