@@ -355,40 +355,29 @@
     if (btn) btn.click();
   }
 
-  var shareWatcherInstalled = false, lastShareVal = '';
+  var _shareWatching = false, _lastShare = '';
   function watchShareResult() {
-    if (shareWatcherInstalled) return;
-    shareWatcherInstalled = true;
+    if (_shareWatching) return;
+    _shareWatching = true;
     setInterval(function () {
       var el = document.getElementById('share-result');
       if (!el) return;
       var ta = el.querySelector('textarea') || el.querySelector('input');
       if (!ta) return;
       var val = ta.value;
-      if (!val || val === lastShareVal) return;
-      lastShareVal = val;
+      if (!val || val === _lastShare) return;
+      _lastShare = val;
       if (val.startsWith('http')) {
         navigator.clipboard.writeText(val).then(function () {
           window.showToast && window.showToast('分享链接已复制！', 'success');
         });
-      } else if (val.trim().startsWith('#')) {
-        var blob = new Blob([val], { type: 'text/markdown;charset=utf-8' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = '对话导出_' + new Date().toISOString().slice(0,10) + '.md';
-        a.click(); URL.revokeObjectURL(a.href);
-      } else if (val.length > 10 && !val.startsWith('⚠')) {
-        navigator.clipboard.writeText(val).then(function () {
-          window.showToast && window.showToast('已复制到剪贴板', 'success');
-        });
       } else if (val.startsWith('⚠')) {
         window.showToast && window.showToast(val, 'error');
       }
-      var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
-                || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      if (setter) setter.call(ta, '');
-      else ta.value = '';
-      lastShareVal = '';
+      var s = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set
+            || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+      if (s) s.call(ta, ''); else ta.value = '';
+      _lastShare = '';
     }, 500);
   }
 

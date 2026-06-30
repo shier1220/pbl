@@ -1,2 +1,3 @@
 from src.session.manager import SessionManager
-__all__ = ["SessionManager"]
+from src.session.context_memory import ContextMemory
+__all__ = ["SessionManager", "ContextMemory"]

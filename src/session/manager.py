@@ -130,6 +130,14 @@ class SessionManager:
                 (user_id, session_id),
             )
 
+    def _delete_session(self, session_id: str):
+        """删除会话及其所有消息（硬删除）"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM session_meta WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM session_registry WHERE session_id=?", (session_id,))
+        logger.info("已删除会话: %s", session_id)
+
     def ensure_session_owner(self, session_id: str, user_id: int) -> bool:
         """检查会话是否属于该用户（None 表示孤儿会话，拒绝访问）"""
         owner = self.get_session_owner(session_id)
@@ -138,9 +146,14 @@ class SessionManager:
         return owner == user_id
 
     @staticmethod
-    def build_messages(history: list, current_msg: str, system_prompt: str, user_name=""):
+    def build_messages(history: list, current_msg: str, system_prompt: str, user_name="", memory_summary=""):
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        st = system_prompt + (f"\n\n当前用户的名字是：{user_name}" if user_name else "")
+        parts = [system_prompt]
+        if memory_summary:
+            parts.append(f"\n## 上下文记忆（更早对话的摘要）\n{memory_summary}")
+        if user_name:
+            parts.append(f"\n当前用户的名字是：{user_name}")
+        st = "".join(parts)
         msgs = [SystemMessage(content=st)]
         for m in history:
             msgs.append(HumanMessage(content=m["content"]) if m["role"]=="user" else AIMessage(content=m["content"]))

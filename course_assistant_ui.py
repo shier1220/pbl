@@ -467,18 +467,12 @@ def do_clear_chat():
     return [], None
 
 
-def do_copy_chat():
-    """返回对话文本"""
-    return copy_chat_text()
-
-
 def do_share_chat():
     """整个对话分享 → 返回分享链接（JS 轮询复制）"""
     sess = get_current()
     msgs = sess["messages"]
     if not msgs:
         return "⚠️ 暂无对话"
-
     try:
         token = _get_stored_token()
         if not token:
@@ -652,9 +646,8 @@ with gr.Blocks(theme=gr.themes.Default()) as demo:
             with gr.Column(scale=8, elem_classes="chat-area", elem_id="chat-area"):
                 gr.Markdown("## 欢迎使用AIGC咨询助手", elem_classes="chat-title")
 
-                # 聊天室工具栏按钮（出现在 Chatbot 右上角原生面板）
-                _toolbar_clear = gr.Button("🗑 清空对话", size="sm")
-                _toolbar_share = gr.Button("🔗 分享链接", size="sm")
+                _toolbar_clear = gr.Button("🗑", size="sm")
+                _toolbar_share = gr.Button("🔗", size="sm")
 
                 chatbot = gr.Chatbot(
                     layout="bubble", feedback_options=None,
@@ -662,7 +655,7 @@ with gr.Blocks(theme=gr.themes.Default()) as demo:
                     elem_id="main-chatbot",
                     label="对话区",
                     show_label=False,
-                    buttons=["copy_all", _toolbar_clear, _toolbar_share],
+                    buttons=["copy_all", _toolbar_share, _toolbar_clear],
                 )
 
                 with gr.Row(elem_classes="input-row"):
@@ -685,8 +678,6 @@ with gr.Blocks(theme=gr.themes.Default()) as demo:
 
         # 隐藏桥接（CSS 隐藏但保持 DOM 事件）
         _share_result = gr.Textbox(value="", elem_classes="hidden-btn", elem_id="share-result")
-        _btn_clear = gr.Button("clear", elem_classes="hidden-btn", elem_id="btn-clear-chat")
-        _btn_share = gr.Button("share", elem_classes="hidden-btn", elem_id="btn-share-chat")
 
     # ========== 6. 绑定事件 ==========
     # 登录成功 → 隐藏登录表单，显示聊天界面
@@ -735,10 +726,6 @@ with gr.Blocks(theme=gr.themes.Default()) as demo:
     upload_btn.upload(on_upload, [upload_btn, chatbot, token_state], [file_ctx, chatbot])
     session_radio.change(switch_session, [session_radio], [chatbot, file_ctx])
     delete_btn.click(delete_current_session, [], [session_radio, chatbot, file_ctx])
-    _btn_clear.click(do_clear_chat, [], [chatbot, file_ctx])
-    _btn_share.click(do_share_chat, [], [_share_result])
-
-    # 原生工具栏按钮
     _toolbar_clear.click(do_clear_chat, [], [chatbot, file_ctx])
     _toolbar_share.click(do_share_chat, [], [_share_result])
     chatbot.clear(do_clear_chat, [], [chatbot, file_ctx])

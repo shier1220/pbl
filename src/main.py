@@ -10,7 +10,7 @@ if _PROJECT_ROOT not in sys.path: sys.path.insert(0, _PROJECT_ROOT)
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 from chromadb import PersistentClient
 from langchain_community.vectorstores import Chroma
@@ -20,12 +20,16 @@ from langchain_core.messages import HumanMessage
 from src.config import *
 from src.embedding import InstructorEmbedding
 from src.session.manager import SessionManager
+from src.session.context_memory import ContextMemory
 from src.rag.retriever import HybridRetriever
 from src.rag.cache import QueryCache
 from src.rag.prompts import SYSTEM_PROMPT
 from src.rag.generator import RAGGenerator
 from src.rag.query_expander import QueryCondenser
 from src.intent import Intent, IntentResult, IntentRouter, get_prompt_for_intent
+from src.intent.complexity import ComplexityAnalyzer, TaskPlanner, ComplexityLevel
+from src.intent.followup import FollowUpRecommender
+from src.share import save_share, get_share, render_share_page
 from src.search.engine import WebSearchEngine
 from src.search.cache import RateLimiter
 from src.search.attribution import format_search_context, format_search_sources
@@ -70,12 +74,14 @@ session_mgr = embedding_fn = chroma_client = vectorstore = collection = _llm = N
 router = hybrid_retriever = query_cache = parser_registry = document_chunker = None
 intent_router = rag_generator = query_condenser = None
 search_engine = rate_limiter = None
-user_svc = None
+user_svc = context_memory = None
+complexity_analyzer = task_planner = None
+followup_recommender = None
 
 
 # ========== 请求/响应模型 ==========
 class ChatRequest(BaseModel): message: str; session_id: str = "default"
-class ChatResponse(BaseModel): answer: str; source: str = "rag"; docs: list = []
+class ChatResponse(BaseModel): answer: str; source: str = "rag"; docs: list = []; followup: list = []
 class UploadResponse(BaseModel): status: str; filename: str; chunks: int
 class SearchRequest(BaseModel): query: str; max_results: int = 5
 
@@ -90,7 +96,8 @@ async def lifespan(app: FastAPI):
     global session_mgr, embedding_fn, chroma_client, vectorstore, collection, _llm, router
     global hybrid_retriever, query_cache, parser_registry, document_chunker
     global intent_router, rag_generator, query_condenser
-    global search_engine, rate_limiter, user_svc
+    global search_engine, rate_limiter, user_svc, context_memory
+    global complexity_analyzer, task_planner, followup_recommender
 
     logger.info("=" * 50)
     logger.info("AIGC 课程助手 v0.7.0 启动中...")
@@ -100,7 +107,8 @@ async def lifespan(app: FastAPI):
     logger.info("[1/9] 用户服务就绪")
 
     session_mgr = SessionManager()
-    logger.info("[2/9] 会话管理器就绪")
+    context_memory = ContextMemory(recent_window=6)
+    logger.info("[2/9] 会话管理 + 上下文记忆就绪")
 
     embedding_fn = InstructorEmbedding(MODEL_PATH, device=EMBEDDING_DEVICE)
     logger.info("[3/9] 嵌入模型就绪 (device=%s)", EMBEDDING_DEVICE)
@@ -131,6 +139,10 @@ async def lifespan(app: FastAPI):
     # 新：5 类意图路由 + LLM 回退验证
     intent_router = IntentRouter(vectorstore, _llm, embedding_fn)
     rag_generator = RAGGenerator(_llm, session_mgr)
+    complexity_analyzer = ComplexityAnalyzer(_llm)
+    task_planner = TaskPlanner()
+    followup_recommender = FollowUpRecommender(_llm)
+    logger.info("[8/9] 复杂度分析 + 任务规划 + 问题推荐就绪")
     query_condenser = QueryCondenser(_llm)
     router = intent_router  # 向后兼容
     logger.info("[8/9] 意图路由就绪 (嵌入k-NN + LLM few-shot)")
@@ -211,6 +223,35 @@ async def session_history(sid: str, user: dict = Depends(get_current_user)):
     return session_mgr.get_session_history(sid)
 
 
+@app.delete("/sessions/{sid}")
+async def delete_session(sid: str, user: dict = Depends(get_current_user)):
+    """删除会话（需拥有者权限）"""
+    owner = session_mgr.get_session_owner(sid)
+    if owner is not None and owner != user["user_id"]:
+        raise HTTPException(403, "无权删除此会话")
+    session_mgr._delete_session(sid)
+    return {"ok": True}
+
+
+# ── 分享 ──
+
+class ShareRequest(BaseModel):
+    messages: list
+    title: str = "对话分享"
+
+@app.post("/share")
+async def create_share(req: ShareRequest, user: dict = Depends(get_current_user)):
+    """创建分享链接"""
+    share_id = save_share(req.messages, req.title)
+    return {"share_id": share_id, "url": f"/share/{share_id}"}
+
+
+@app.get("/share/{share_id}", response_class=HTMLResponse)
+async def view_share(share_id: str):
+    """公开查看分享的对话（无需登录）"""
+    return render_share_page(share_id)
+
+
 # ========== 流式聊天 ==========
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
@@ -228,6 +269,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
             session_mgr.claim_session(sid, user["user_id"])
 
     history = session_mgr.get_history(sid)
+    recent_history, memory_summary = context_memory.build_context(history)
     user_name = session_mgr.get_user_name(sid)
     extracted = session_mgr.extract_user_name(msg)
     if extracted: user_name = extracted; session_mgr.set_user_name(sid, user_name)
@@ -238,7 +280,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
         intent_result = quick
         search_task = None  # 城市名/赛事名不需要搜索预取
     else:
-        intent_task = asyncio.create_task(intent_router.route(msg, history, sid))
+        intent_task = asyncio.create_task(intent_router.route(msg, recent_history, sid))
         search_task = asyncio.create_task(search_engine.search_with_answer(msg))
         try:
             intent_result = await asyncio.wait_for(intent_task, timeout=1.5)
@@ -246,19 +288,35 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
             intent_result = quick  # LLM 超时 → 快速规则结果
     logger.info("[stream] intent=%s conf=%.2f method=%s", intent_result.intent.value, intent_result.confidence, intent_result.method)
 
+    # 复杂度分析 + 任务规划（复杂问题）
+    complexity = complexity_analyzer.analyze(msg)
+    plan = None
+    if complexity.level == ComplexityLevel.COMPLEX:
+        plan = task_planner.plan(msg, intent_result.intent)
+        logger.info("[stream] 复杂问题，生成 %d 步执行计划", len(plan.steps))
+
     cache_key = f"{intent_result.intent.value}:{msg}"
     cached = query_cache.get(cache_key)
 
     async def gen():
+        def _make_done(source, docs=None, answer=""):
+            """构建 done SSE 事件，附带后续问题推荐"""
+            event = {"token": "", "done": True, "source": source, "docs": docs or []}
+            if answer and len(answer) > 20:
+                event["followup"] = followup_recommender.recommend(
+                    msg, answer, intent_result.intent.value
+                )
+            return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
         try:
             if cached:
                 full_cached = "".join(cached["tokens"])
-                if not history or history[-1][0] != "user" or history[-1][1] != msg:
+                if not recent_history or recent_history[-1]["role"] != "user" or recent_history[-1]["content"] != msg:
                     session_mgr.append_history(sid, "user", msg, user["user_id"])
                 session_mgr.append_history(sid, "assistant", full_cached, user["user_id"])
                 for token_chunk in cached["tokens"]:
                     yield f"data: {json.dumps({'token':token_chunk,'done':False},ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'token':'','done':True,'source':cached.get('source','rag'),'docs':cached.get('docs',[])},ensure_ascii=False)}\n\n"
+                yield _make_done(cached.get("source", "rag"), cached.get("docs", []), full_cached)
                 return
         except Exception:
             pass
@@ -269,11 +327,17 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
             session_mgr.append_history(sid, "assistant", reply, user["user_id"])
             for ch in reply:
                 yield f"data: {json.dumps({'token':ch,'done':False},ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'token':'','done':True,'source':'casual_chat','docs':[]},ensure_ascii=False)}\n\n"
+            yield _make_done("casual_chat", [], reply)
             return
 
         # 发送思考状态
         yield f"data: {json.dumps({'token':'','done':False,'thinking':True},ensure_ascii=False)}\n\n"
+
+        # 复杂问题：输出执行计划
+        if plan and len(plan.steps) > 1:
+            progress = plan.format_progress()
+            for ch in progress:
+                yield f"data: {json.dumps({'token':ch,'done':False},ensure_ascii=False)}\n\n"
 
         full = ""
         # 等待搜索结果（如果有预取）
@@ -282,7 +346,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
         try:
             # ── COURSE_QUESTION：混合检索 + RAG 生成 ──
             if intent_result.intent == Intent.COURSE_QUESTION:
-                condensed = await query_condenser.condense(msg, history) if history else msg
+                condensed = await query_condenser.condense(msg, recent_history) if recent_history else msg
                 rr = hybrid_retriever.retrieve(condensed, top_k=5)
 
                 # 低置信度时补充网络搜索
@@ -294,7 +358,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
                             web_ctx = "## 🌐 网络搜索结果\n" + format_search_context(wr)
                     except Exception: pass
 
-                async for event in rag_generator.stream_rag(msg, rr, sid, history, user_name, web_context=web_ctx, user_id=user["user_id"]):
+                async for event in rag_generator.stream_rag(msg, rr, sid, recent_history, user_name, web_context=web_ctx, user_id=user["user_id"], memory_summary=memory_summary, followup_recommender=followup_recommender):
                     yield event
 
             # ── WEB_SEARCH：Bocha 流式 → 非流式 → Bing+DeepSeek ──
@@ -308,7 +372,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
                 if tokens:
                     session_mgr.append_history(sid, "user", msg, user["user_id"])
                     session_mgr.append_history(sid, "assistant", full, user["user_id"])
-                    yield f"data: {json.dumps({'token':'','done':True,'source':'web_search','docs':[]},ensure_ascii=False)}\n\n"
+                    yield _make_done("web_search", [], full)
                     return
 
                 # 2. Bocha 非流式 / Bing + DeepSeek
@@ -329,12 +393,12 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
                         yield f"data: {json.dumps({'token':ch,'done':False},ensure_ascii=False)}\n\n"
                 session_mgr.append_history(sid, "user", msg, user["user_id"])
                 session_mgr.append_history(sid, "assistant", full, user["user_id"])
-                yield f"data: {json.dumps({'token':'','done':True,'source':'web_search','docs':search_docs},ensure_ascii=False)}\n\n"
+                yield _make_done("web_search", search_docs, full)
 
             # ── CASUAL_CHAT / FILE_OPERATION / SYSTEM_COMMAND ──
             else:
                 prompt = get_prompt_for_intent(intent_result.intent)
-                msgs = session_mgr.build_messages(history, msg, prompt, user_name)
+                msgs = session_mgr.build_messages(recent_history, msg, prompt, user_name, memory_summary)
                 tokens = []
                 async for chunk in _llm.astream(msgs):
                     t = chunk.content
@@ -342,7 +406,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(get_current_user)):
                 session_mgr.append_history(sid, "user", msg, user["user_id"])
                 session_mgr.append_history(sid, "assistant", full, user["user_id"])
                 query_cache.put(cache_key, {"tokens": tokens, "source": intent_result.intent.value, "docs": []})
-                yield f"data: {json.dumps({'token':'','done':True,'source':intent_result.intent.value,'docs':[]},ensure_ascii=False)}\n\n"
+                yield _make_done(intent_result.intent.value, [], full)
 
         except Exception as e:
             logger.exception("流式异常: %s", e)
@@ -368,7 +432,8 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         if owner is None:
             session_mgr.claim_session(sid, user["user_id"])
 
-    history = session_mgr.get_history(sid)
+    raw_history = session_mgr.get_history(sid)
+    history, memory_summary = context_memory.build_context(raw_history)
     user_name = session_mgr.get_user_name(sid)
     extracted = session_mgr.extract_user_name(msg)
     if extracted: user_name = extracted; session_mgr.set_user_name(sid, user_name)
@@ -377,7 +442,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
         reply = GREETINGS[msg]
         session_mgr.append_history(sid, "user", msg, user["user_id"])
         session_mgr.append_history(sid, "assistant", reply, user["user_id"])
-        return ChatResponse(answer=reply, source="casual_chat")
+        return ChatResponse(answer=reply, source="casual_chat", followup=[])
 
     # 并行：意图分类 + 搜索
     intent_task = asyncio.create_task(intent_router.route(msg, history, sid))
@@ -385,13 +450,19 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
     intent_result = await intent_task
     logger.info("[chat] intent=%s conf=%.2f method=%s", intent_result.intent.value, intent_result.confidence, intent_result.method)
 
+    async def _followup(answer_text=""):
+        """生成后续推荐问题（规则 + LLM 兜底）"""
+        if answer_text and len(answer_text) > 20:
+            return await followup_recommender.recommend_async(msg, answer_text, intent_result.intent.value)
+        return []
+
     # 缓存检查
     cache_key = f"{intent_result.intent.value}:{msg}"
     cached = query_cache.get(cache_key)
     if cached:
         full_answer = "".join(cached["tokens"])
         return ChatResponse(answer=full_answer, source=cached.get("source", "rag"),
-                          docs=cached.get("docs", []))
+                          docs=cached.get("docs", []), followup=await _followup(full_answer))
 
     try:
         # ── COURSE_QUESTION：混合检索 + RAG ──
@@ -406,12 +477,12 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
                     if wr:
                         web_ctx = "## 🌐 网络搜索结果\n" + format_search_context(wr)
                 except Exception: pass
-            response = await rag_generator.generate_rag(msg, rr, sid, history, user_name, web_context=web_ctx, user_id=user["user_id"])
+            response = await rag_generator.generate_rag(msg, rr, sid, history, user_name, web_context=web_ctx, user_id=user["user_id"], memory_summary=memory_summary)
             query_cache.put(cache_key, {"tokens": [response["answer"]],
                             "source": response.get("source", "rag"),
                             "docs": response.get("docs", [])})
             return ChatResponse(answer=response["answer"], source=response.get("source", "rag"),
-                              docs=response.get("docs", []))
+                              docs=response.get("docs", []), followup=await _followup(response.get("answer", "")))
 
         # ── WEB_SEARCH：Bocha 直接回答 / Bing + DeepSeek 总结 ──
         elif intent_result.intent == Intent.WEB_SEARCH:
@@ -429,22 +500,22 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user)):
 
             session_mgr.append_history(sid, "user", msg, user["user_id"])
             session_mgr.append_history(sid, "assistant", answer, user["user_id"])
-            return ChatResponse(answer=answer, source="web_search", docs=search_docs)
+            return ChatResponse(answer=answer, source="web_search", docs=search_docs, followup=await _followup(answer))
 
         # ── CASUAL_CHAT / FILE_OPERATION / SYSTEM_COMMAND ──
         else:
             prompt = get_prompt_for_intent(intent_result.intent)
-            msgs = session_mgr.build_messages(history, msg, prompt, user_name)
+            msgs = session_mgr.build_messages(history, msg, prompt, user_name, memory_summary)
             resp = await _llm_invoke(msgs)
             answer = resp.content
             session_mgr.append_history(sid, "user", msg, user["user_id"])
             session_mgr.append_history(sid, "assistant", answer, user["user_id"])
             query_cache.put(cache_key, {"tokens": [answer], "source": intent_result.intent.value, "docs": []})
-            return ChatResponse(answer=answer, source=intent_result.intent.value)
+            return ChatResponse(answer=answer, source=intent_result.intent.value, followup=await _followup(answer))
 
     except Exception as e:
         logger.exception("[chat] 异常: %s", e)
-        return ChatResponse(answer="抱歉，服务暂不可用。", source="fallback")
+        return ChatResponse(answer="抱歉，服务暂不可用。", source="fallback", followup=[])
 
 
 # ========== 文件上传 ==========

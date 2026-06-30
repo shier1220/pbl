@@ -41,18 +41,21 @@ $question
 """)
 
 
-def build_rag_prompt(system_prompt, question, context, history_text="", user_name="", sources=""):
+def build_rag_prompt(system_prompt, question, context, history_text="", user_name="", sources="", memory_summary=""):
+    # 记忆摘要放在对话历史之前（如果有的话）
+    memory_block = f"## 上下文记忆（更早对话的摘要）\n{memory_summary}\n\n" if memory_summary else ""
     return RAG_TEMPLATE.substitute(
         system_prompt=system_prompt,
         name_line=f"当前用户的名字是：{user_name}\n" if user_name else "",
-        history_text=f"## 对话历史\n{history_text}\n" if history_text else "",
+        history_text=f"{memory_block}## 对话历史\n{history_text}\n" if (history_text or memory_block) else "",
         context=context, question=question,
         user_name=user_name or "未知",
     )
 
 
-def build_casual_prompt(system_prompt, question, history_text="", user_name=""):
-    return f"{system_prompt}\n\n{f'当前用户的名字是：{user_name}' if user_name else ''}\n\n{history_text}\n\n## 用户消息\n{question}"
+def build_casual_prompt(system_prompt, question, history_text="", user_name="", memory_summary=""):
+    memory_block = f"## 上下文记忆（更早对话的摘要）\n{memory_summary}\n\n" if memory_summary else ""
+    return f"{system_prompt}\n\n{f'当前用户的名字是：{user_name}' if user_name else ''}\n\n{memory_block}{history_text}\n\n## 用户消息\n{question}"
 
 
 def format_sources(docs: list) -> str:

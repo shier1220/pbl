@@ -3,3 +3,8 @@ from src.intent.classifier import Intent, IntentResult, EmbeddingIntentClassifie
 from src.intent.fallback import IntentFallbackChain
 from src.intent.router import IntentRouter
 from src.intent.prompts import get_prompt_for_intent, INTENT_PROMPTS
+from src.intent.complexity import (
+    ComplexityAnalyzer, TaskPlanner, TaskPlan, TaskStep,
+    ComplexityLevel, ComplexityResult,
+)
+from src.intent.followup import FollowUpRecommender
